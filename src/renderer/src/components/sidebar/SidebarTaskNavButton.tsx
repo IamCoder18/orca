@@ -86,6 +86,7 @@ export function SidebarTaskNavButton(): React.JSX.Element | null {
   )
   const linearStatus = useAppStore((s) => s.linearStatus)
   const linearStatusChecked = useAppStore((s) => s.linearStatusChecked)
+  const hulyStatus = useAppStore((s) => s.hulyStatus)
   const checkLinearConnection = useAppStore((s) => s.checkLinearConnection)
   const prefetchWorkItems = useAppStore((s) => s.prefetchWorkItems)
   const activeRepoId = useAppStore((s) => s.activeRepoId)
@@ -101,13 +102,15 @@ export function SidebarTaskNavButton(): React.JSX.Element | null {
         preferredVisibleTaskProviders,
         {
           gitlabInstalled: preflightStatusCurrent && preflightStatus?.glab?.installed === true,
-          linearConnected: linearStatus.connected === true
+          linearConnected: linearStatus.connected === true,
+          hulyConnected: hulyStatus.connected === true
         },
         defaultTaskSource
       ),
     [
       defaultTaskSource,
       linearStatus.connected,
+      hulyStatus.connected,
       preferredVisibleTaskProviders,
       preflightStatusCurrent,
       preflightStatus?.glab?.installed

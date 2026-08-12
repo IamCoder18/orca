@@ -11,7 +11,7 @@ import {
   type TaskProviderReadiness
 } from './task-source-setup-state'
 
-const ORDER: readonly TaskProvider[] = ['github', 'gitlab', 'linear', 'jira']
+const ORDER: readonly TaskProvider[] = ['github', 'gitlab', 'linear', 'jira', 'huly']
 
 function buildReadiness(
   overrides: Partial<Record<TaskProvider, Partial<TaskProviderReadiness>>> = {}
@@ -26,7 +26,8 @@ function buildReadiness(
       skillChecking: false,
       visible: true
     },
-    jira: { connected: true, checking: false, visible: true }
+    jira: { connected: true, checking: false, visible: true },
+    huly: { connected: false, checking: false, visible: false }
   }
   for (const provider of ORDER) {
     Object.assign(base[provider], overrides[provider])
@@ -286,5 +287,44 @@ describe('task-source-setup-state', () => {
         previousAutoExpanded: 'linear'
       })
     ).toBe('linear')
+  })
+
+  it('treats a Huly setup with connection but no skill as skill-required', () => {
+    const readiness = buildReadiness({
+      huly: { connected: true, checking: false, visible: true, skillInstalled: false }
+    })
+    // Why: Huly mirrors Linear — once connected, the wizard gates completion on
+    // the agent skill install, so the status is skill-required not connect-required.
+    expect(getTaskProviderSetupStatus(readiness.huly)).toBe('skill-required')
+  })
+
+  it('treats a Huly setup with connection + skill + visibility as ready', () => {
+    const readiness = buildReadiness({
+      huly: { connected: true, checking: false, visible: true, skillInstalled: true }
+    })
+    expect(isTaskProviderReady(readiness.huly)).toBe(true)
+  })
+
+  it('treats a hidden Huly as deliberately disabled even when connected', () => {
+    const readiness = buildReadiness({
+      huly: { connected: true, checking: false, visible: false, skillInstalled: true }
+    })
+    expect(getTaskProviderSetupStatus(readiness.huly)).toBe('hidden')
+  })
+
+  it('reports Huly as not-ready when connected with a missing skill install', () => {
+    const readiness = buildReadiness({
+      huly: { connected: true, checking: false, visible: true, skillInstalled: false }
+    })
+    // Why: Huly mirrors Linear — once the connection is up the wizard gates
+    // completion on the agent skill install.
+    expect(isTaskProviderReady(readiness.huly)).toBe(false)
+  })
+
+  it('excludes a disconnected Huly from the stalled-provider warning', () => {
+    const readiness = buildReadiness({
+      huly: { connected: false, checking: false, visible: true }
+    })
+    expect(getStalledVisibleTaskProviders(ORDER, readiness)).not.toContain('huly')
   })
 })

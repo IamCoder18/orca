@@ -5,9 +5,11 @@ export type TaskProviderReadiness = {
   connected: boolean
   checking: boolean
   unavailable?: boolean
-  /** Linear only — agent skill install. Other providers leave this undefined. */
+  /** Linear and Huly — agent skill install. Other providers leave this undefined. */
   skillInstalled?: boolean
   skillChecking?: boolean
+  /** Huly — CLI binary installed on the Orca server. */
+  cliInstalled?: boolean
   visible: boolean
 }
 

@@ -436,7 +436,7 @@ import {
   getLinearOrderOptions,
   getLinearPriorityLabel,
   getLinearViewOptions,
-  getSourceOptions,
+  getSourceOptionsWithAvailability,
   type GitHubTaskKind,
   type GitLabIssueFilter,
   type GitLabTaskFilter,
@@ -3046,16 +3046,20 @@ export default function TaskPage(): React.JSX.Element {
   const searchJiraIssues = useAppStore((s) => s.searchJiraIssues)
   const listJiraIssues = useAppStore((s) => s.listJiraIssues)
   const checkJiraConnection = useAppStore((s) => s.checkJiraConnection)
+  const hulyStatus = useAppStore((s) => s.hulyStatus)
+  const hulyStatusContextKey = useAppStore((s) => s.hulyStatusContextKey)
   const providerRuntimeContextKey = getProviderRuntimeContextKey(settings)
   const providerRuntimeContextKeyRef = useRef(providerRuntimeContextKey)
   providerRuntimeContextKeyRef.current = providerRuntimeContextKey
   const linearStatusCurrent = linearStatusContextKey === providerRuntimeContextKey
   const jiraStatusCurrent = jiraStatusContextKey === providerRuntimeContextKey
+  const hulyStatusCurrent = hulyStatusContextKey === providerRuntimeContextKey
   const preflightStatusCurrent = preflightStatusContextKey === expectedPreflightContextKey
   const linearStatusReady = linearStatusCurrent && linearStatusChecked
   const jiraStatusReady = jiraStatusCurrent && jiraStatusChecked
   const linearConnected = linearStatusCurrent && linearStatus.connected
   const jiraConnected = jiraStatusCurrent && jiraStatus.connected
+  const hulyConnected = hulyStatusCurrent && hulyStatus.connected
   const submitShortcutLabel = getScreenSubmitShortcutLabel()
   const eligibleRepos = useMemo(() => getTaskEligibleRepos(repos), [repos])
 
@@ -3162,19 +3166,25 @@ export default function TaskPage(): React.JSX.Element {
         preferredVisibleTaskProviders,
         {
           gitlabInstalled: preflightStatusCurrent && preflightStatus?.glab?.installed === true,
-          linearConnected: linearConnected === true
+          linearConnected: linearConnected === true,
+          hulyConnected: hulyConnected === true
         },
         defaultTaskSource
       ),
     [
       defaultTaskSource,
+      hulyConnected,
       linearConnected,
       preferredVisibleTaskProviders,
       preflightStatusCurrent,
       preflightStatus?.glab?.installed
     ]
   )
-  const sourceOptions = getSourceOptions()
+  const sourceOptions = getSourceOptionsWithAvailability({
+    gitlabInstalled: preflightStatusCurrent && preflightStatus?.glab?.installed === true,
+    linearConnected: linearConnected === true,
+    hulyConnected: hulyConnected === true
+  })
   const githubModeButtons = getGitHubModeButtons()
   const linearModeOptions = getLinearModeOptions()
   const jiraPresets = getJiraPresets()
@@ -3538,7 +3548,7 @@ export default function TaskPage(): React.JSX.Element {
       providerLabel,
       repoContexts: taskSourceRepoContexts,
       hostAvailability:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'huly'
           ? accountBackedTaskSourceHostAvailability
           : taskSourceHostAvailability,
       accountHostId: accountBackedTaskSourceHostId,
@@ -3566,11 +3576,11 @@ export default function TaskPage(): React.JSX.Element {
     return getTaskSourceAvailabilityNotice({
       providerLabel,
       sourceCount:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'huly'
           ? 1
           : Math.max(1, taskSourceRepoContexts.length),
       hostAvailability:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'huly'
           ? accountBackedTaskSourceHostAvailability
           : taskSourceHostAvailability,
       hostLabelById

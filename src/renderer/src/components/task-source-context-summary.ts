@@ -51,15 +51,15 @@ export function getTaskSourceContextSummary(args: {
     case 'gitlab':
       return getRepoBackedTaskSourceSummary(args)
     case 'linear':
-      return getAccountBackedTaskSourceSummary(args.providerLabel, {
-        accountLabel: args.linearWorkspaceName,
-        accountHostId: args.accountHostId,
-        hostLabelById: args.hostLabelById,
-        hostAvailability: args.hostAvailability
-      })
     case 'jira':
+    case 'huly':
       return getAccountBackedTaskSourceSummary(args.providerLabel, {
-        accountLabel: args.jiraSiteName,
+        accountLabel:
+          args.provider === 'linear'
+            ? args.linearWorkspaceName
+            : args.provider === 'jira'
+              ? args.jiraSiteName
+              : null,
         accountHostId: args.accountHostId,
         hostLabelById: args.hostLabelById,
         hostAvailability: args.hostAvailability
@@ -198,6 +198,8 @@ function getProviderIdentityLabel(
       return identity.workspaceName ?? identity.workspaceId ?? null
     case 'jira':
       return identity.siteUrl ?? identity.siteId ?? null
+    case 'huly':
+      return identity.workspaceName ?? identity.workspaceId ?? null
   }
 }
 
