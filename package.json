@@ -293,11 +293,10 @@
       ]
     },
     "onlyBuiltDependencies": [
-      "@parcel/watcher",
-      "cpu-features",
-      "esbuild",
-      "node-pty",
-      "sherpa-onnx"
+      "@swc/core",
+      "agent-browser",
+      "msw",
+      "node-pty"
     ],
     "patchedDependencies": {
       "node-pty@1.1.0": "config/patches/node-pty@1.1.0.patch",

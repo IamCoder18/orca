@@ -1,5 +1,5 @@
 diff --git a/binding.gyp b/binding.gyp
-index 5f63978b07ab50aaf7523219a2170ec737a6b5db..bbd9e06136e8922f40b5779e35d4fc835f1479ab 100644
+index 5f63978..bbd9e06 100644
 --- a/binding.gyp
 +++ b/binding.gyp
 @@ -5,9 +5,6 @@
@@ -30,12 +30,12 @@ index 5f63978b07ab50aaf7523219a2170ec737a6b5db..bbd9e06136e8922f40b5779e35d4fc83
            ]
          }
 diff --git a/deps/winpty/src/winpty.gyp b/deps/winpty/src/winpty.gyp
-index 1ac5758bedd8cf54f32280dea4e4aeb5afdee30d..e619813759c6f14694838bdfbd0ea5f8360130ef 100644
+index 1ac5758..e619813 100644
 --- a/deps/winpty/src/winpty.gyp
 +++ b/deps/winpty/src/winpty.gyp
 @@ -10,7 +10,7 @@
      #    make -j4 CXX=i686-w64-mingw32-g++ LDFLAGS="-static -static-libgcc -static-libstdc++"
-
+ 
      'variables': {
 -        'WINPTY_COMMIT_HASH%': '<!(cmd /c "cd shared && GetCommitHash.bat")',
 +        'WINPTY_COMMIT_HASH%': '<!(cmd /c "cd shared && .\\GetCommitHash.bat")',
@@ -72,7 +72,7 @@ index 1ac5758bedd8cf54f32280dea4e4aeb5afdee30d..e619813759c6f14694838bdfbd0ea5f8
                  # Specify this setting here to override a setting from somewhere
                  # else, such as node's common.gypi.
 diff --git a/lib/conpty_console_list_agent.js b/lib/conpty_console_list_agent.js
-index 8c4fca9022a6d6f015bca87f61625cde2278f428..0a01730616488119aa21ef441cf3c441e02a974c 100644
+index 8c4fca9..0a01730 100644
 --- a/lib/conpty_console_list_agent.js
 +++ b/lib/conpty_console_list_agent.js
 @@ -10,7 +10,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
@@ -93,7 +93,7 @@ index 8c4fca9022a6d6f015bca87f61625cde2278f428..0a01730616488119aa21ef441cf3c441
  //# sourceMappingURL=conpty_console_list_agent.js.map
 \ No newline at end of file
 diff --git a/lib/unixTerminal.js b/lib/unixTerminal.js
-index 1ec12f796a822c78fba9ad7f6448c3987e325c23..cec8b67aef02f8199e5606a0d257088bf1865877 100644
+index 1ec12f7..cec8b67 100644
 --- a/lib/unixTerminal.js
 +++ b/lib/unixTerminal.js
 @@ -28,8 +28,12 @@ var native = utils_1.loadNativeModule('pty');
@@ -112,11 +112,11 @@ index 1ec12f796a822c78fba9ad7f6448c3987e325c23..cec8b67aef02f8199e5606a0d257088b
  var DEFAULT_NAME = 'xterm';
  var DESTROY_SOCKET_TIMEOUT_MS = 200;
 diff --git a/src/conpty_console_list_agent.ts b/src/conpty_console_list_agent.ts
-index 181ccabbbe9c4948a9725fb1db907a68e9de01fc..67f31facf85562b67adbfbd04ce28ddd8eeb4a79 100644
+index 181ccab..67f31fa 100644
 --- a/src/conpty_console_list_agent.ts
 +++ b/src/conpty_console_list_agent.ts
 @@ -10,6 +10,12 @@ import { loadNativeModule } from './utils';
-
+ 
  const getConsoleProcessList = loadNativeModule('conpty_console_list').module.getConsoleProcessList;
  const shellPid = parseInt(process.argv[2], 10);
 -const consoleProcessList = getConsoleProcessList(shellPid);
@@ -130,7 +130,7 @@ index 181ccabbbe9c4948a9725fb1db907a68e9de01fc..67f31facf85562b67adbfbd04ce28ddd
  process.send!({ consoleProcessList });
  process.exit(0);
 diff --git a/src/unix/pty.cc b/src/unix/pty.cc
-index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d15c4dd44 100644
+index 7b4b9e1..9f76c24 100644
 --- a/src/unix/pty.cc
 +++ b/src/unix/pty.cc
 @@ -23,7 +23,9 @@
@@ -141,12 +141,12 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
  #include <unistd.h>
 +#include <string>
  #include <thread>
-
+ 
  #include <sys/types.h>
-@@ -47,6 +49,25 @@
+@@ -47,6 +49,27 @@
  #include <termios.h>
  #endif
-
+ 
 +/* Orca: glibc 2.32-2.34 relocated pthread_sigmask/openpty/forkpty into libc
 + * under new symbol versions, so building on a newer glibc produces references
 + * (GLIBC_2.32/2.34) absent on Ubuntu 20.04 (glibc 2.31) and the app fails to
@@ -163,15 +163,17 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +__asm__(".symver openpty,openpty@" ORCA_GLIBC_COMPAT_VERSION);
 +__asm__(".symver forkpty,forkpty@" ORCA_GLIBC_COMPAT_VERSION);
 +__asm__(".symver pthread_sigmask,pthread_sigmask@" ORCA_GLIBC_COMPAT_VERSION);
++__asm__(".symver cfsetispeed,cfsetispeed@" ORCA_GLIBC_COMPAT_VERSION);
++__asm__(".symver cfsetospeed,cfsetospeed@" ORCA_GLIBC_COMPAT_VERSION);
 +#  endif
 +#endif
 +
  /* Some platforms name VWERASE and VDISCARD differently */
  #if !defined(VWERASE) && defined(VWERSE)
  #define VWERASE	VWERSE
-@@ -237,13 +258,23 @@ pty_getproc(int, char *);
+@@ -237,13 +260,23 @@ pty_getproc(int, char *);
  #endif
-
+ 
  #if defined(__APPLE__) || defined(__OpenBSD__)
 +struct pty_spawn_error {
 +  const char* step;
@@ -192,12 +194,12 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 -                int* err);
 +                pty_spawn_error* err);
  #endif
-
+ 
  struct DelBuf {
-@@ -367,10 +398,11 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
+@@ -367,10 +400,11 @@ Napi::Value PtyFork(const Napi::CallbackInfo& info) {
      argv[i + 3] = strdup(arg.c_str());
    }
-
+ 
 -  int err = -1;
 -  pty_posix_spawn(argv, env, term, &winp, &master, &pid, &err);
 -  if (err != 0) {
@@ -210,9 +212,9 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
    }
    if (pty_nonblock(master) == -1) {
      throw Napi::Error::New(napiEnv, "Could not set master fd to nonblocking.");
-@@ -684,15 +716,73 @@ pty_getproc(int fd, char *tty) {
+@@ -684,15 +718,73 @@ pty_getproc(int fd, char *tty) {
  #endif
-
+ 
  #if defined(__APPLE__)
 +static const char*
 +pty_errno_name(int errnum) {
@@ -283,10 +285,10 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +  bool acts_initialized = false;
 +  posix_spawnattr_t attrs;
 +  bool attrs_initialized = false;
-
+ 
    for (; count < 3; count++) {
      low_fds[count] = posix_openpt(O_RDWR);
-@@ -706,80 +796,118 @@ pty_posix_spawn(char** argv, char** env,
+@@ -706,80 +798,118 @@ pty_posix_spawn(char** argv, char** env,
                POSIX_SPAWN_SETSID;
    *master = posix_openpt(O_RDWR);
    if (*master == -1) {
@@ -294,7 +296,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +    pty_set_spawn_error(err, "posix_openpt", errno);
 +    goto done;
    }
-
+ 
 -  int res = grantpt(*master) || unlockpt(*master);
 +  res = grantpt(*master);
    if (res == -1) {
@@ -308,7 +310,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +    pty_set_spawn_error(err, "unlockpt", errno);
 +    goto done;
    }
-
+ 
    // Use TIOCPTYGNAME instead of ptsname() to avoid threading problems.
 -  int slave;
    char slave_pty_name[128];
@@ -318,14 +320,14 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +    pty_set_spawn_error(err, "ioctl_TIOCPTYGNAME", errno);
 +    goto done;
    }
-
+ 
    slave = open(slave_pty_name, O_RDWR | O_NOCTTY);
    if (slave == -1) {
 -    return;
 +    pty_set_spawn_error(err, "open_slave", errno, "slave", slave_pty_name);
 +    goto done;
    }
-
+ 
    if (termp) {
      res = tcsetattr(slave, TCSANOW, termp);
      if (res == -1) {
@@ -334,7 +336,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +      goto done;
      };
    }
-
+ 
    if (winp) {
      res = ioctl(slave, TIOCSWINSZ, winp);
      if (res == -1) {
@@ -343,7 +345,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +      goto done;
      }
    }
-
+ 
 -  posix_spawn_file_actions_t acts;
 -  posix_spawn_file_actions_init(&acts);
 +  res = posix_spawn_file_actions_init(&acts);
@@ -357,7 +359,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
    posix_spawn_file_actions_adddup2(&acts, slave, STDERR_FILENO);
    posix_spawn_file_actions_addclose(&acts, slave);
    posix_spawn_file_actions_addclose(&acts, *master);
-
+ 
 -  posix_spawnattr_t attrs;
 -  posix_spawnattr_init(&attrs);
 -  *err = posix_spawnattr_setflags(&attrs, flags);
@@ -373,7 +375,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +    pty_set_spawn_error(err, "posix_spawnattr_setflags", res);
      goto done;
    }
-
+ 
    sigset_t signal_set;
    /* Reset all signal the child to their default behavior */
    sigfillset(&signal_set);
@@ -384,7 +386,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +    pty_set_spawn_error(err, "posix_spawnattr_setsigdefault", res);
      goto done;
    }
-
+ 
    /* Reset the signal mask for all signals */
    sigemptyset(&signal_set);
 -  *err = posix_spawnattr_setsigmask(&attrs, &signal_set);
@@ -394,7 +396,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +    pty_set_spawn_error(err, "posix_spawnattr_setsigmask", res);
      goto done;
    }
-
+ 
    do
 -    *err = posix_spawn(pid, argv[0], &acts, &attrs, argv, env);
 -  while (*err == EINTR);
@@ -419,7 +421,7 @@ index 7b4b9e1f990fbf95b51528bb56dc9717f5b87532..383df0c9c48355547c65e6c9bbba593d
 +    close(*master);
 +    *master = -1;
 +  }
-
+ 
 -  for (; count > 0; count--) {
 -    close(low_fds[count]);
 +  for (size_t i = 0; i <= count && i < 3; i++) {
