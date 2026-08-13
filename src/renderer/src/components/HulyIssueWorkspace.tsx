@@ -24,6 +24,7 @@ import { formatUiRelativeTimeFromDate } from '@/i18n/relative-time-format'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { HulyIssueActionSidebar } from './HulyIssueActionSidebar'
+import { HulyIssueMetadataSidebar } from './HulyIssueMetadataSidebar'
 
 type Props = {
   issue: HulyIssue
@@ -378,12 +379,18 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
             </div>
           </div>
 
-          <aside className="hidden w-44 shrink-0 border-t border-border/50 bg-muted/20 px-3 py-3 xl:block xl:border-l xl:border-t-0">
+          <aside className="hidden w-56 shrink-0 overflow-y-auto border-t border-border/50 bg-muted/20 px-3 py-3 xl:flex xl:flex-col xl:border-l xl:border-t-0">
             <Button onClick={handleUse} className="mb-3 w-full gap-2">
               {translate('auto.components.huly.issueWorkspace.useInWorktree', 'Use in Worktree')}
               <ArrowRight className="size-3.5" />
             </Button>
-            <HulyIssueActionSidebar issue={fullIssue} />
+            <HulyIssueMetadataSidebar issue={fullIssue} />
+            <div className="mt-3">
+              <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Actions
+              </p>
+              <HulyIssueActionSidebar issue={fullIssue} />
+            </div>
           </aside>
         </div>
       </SheetContent>

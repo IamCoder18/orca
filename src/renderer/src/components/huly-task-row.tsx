@@ -7,11 +7,14 @@ import { ExternalLink, CircleDot } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { HulyIssue } from '../../../shared/huly'
+import type { TaskSourceContext } from '../../../shared/task-source-context'
+import type { GlobalSettings } from '../../../shared/types'
 import { HulyPriorityIcon } from '@/lib/huly-priority-icon'
 import { stateToneClasses } from '@/lib/huly-presentation'
 import { formatUiRelativeTimeFromDate } from '@/i18n/relative-time-format'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
+import { HulyTaskStateChanger } from './huly-task-state-changer'
 
 export const HULY_TASK_ROW_SURFACE_CLASS = 'bg-background transition-colors'
 export const HULY_TASK_ROW_HOVER_SURFACE_CLASS = 'group/huly-task-row:bg-accent'
@@ -35,6 +38,8 @@ export const HULY_TASK_GRID_CLASS =
 type Props = {
   issue: HulyIssue
   showTeam?: boolean
+  sourceContext?: TaskSourceContext | null
+  settings?: GlobalSettings | null
   onOpen: (issue: HulyIssue) => void
   onOpenInHuly: (issue: HulyIssue) => void
 }
@@ -42,6 +47,8 @@ type Props = {
 export function HulyTaskRow({
   issue,
   showTeam = false,
+  sourceContext,
+  settings,
   onOpen,
   onOpenInHuly
 }: Props): React.JSX.Element {
@@ -80,6 +87,12 @@ export function HulyTaskRow({
       <div className={HULY_TASK_STICKY_TITLE_CELL_CLASS}>
         <div className="flex min-w-0 items-center gap-2">
           <h3 className="truncate text-[13px] font-medium text-foreground">{issue.title}</h3>
+          <HulyTaskStateChanger
+            issue={issue}
+            sourceContext={sourceContext ?? null}
+            settings={settings}
+            onOpen={onOpen}
+          />
           {issue.state.type === 'done' || issue.state.type === 'closed' ? (
             <span
               className={cn(

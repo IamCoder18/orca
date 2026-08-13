@@ -41,6 +41,19 @@ const SORT_OPTIONS: { id: SortOrder; label: string }[] = [
 ]
 
 const ALL_WORKSPACES = '__all__'
+const DEFAULT_FILTER_KEY = 'orca-huly-default-filter'
+const DEFAULT_SORT_KEY = 'orca-huly-default-sort'
+
+function readPersisted<T extends string>(key: string, allowed: readonly T[]): T | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    return allowed.includes(raw as T) ? (raw as T) : null
+  } catch {
+    return null
+  }
+}
 
 export function TaskPageHulyView({
   sourceContext,
@@ -52,8 +65,28 @@ export function TaskPageHulyView({
   onUseIssue
 }: Props): React.JSX.Element {
   const listIssues = useAppStore((s) => s.listHulyIssues)
-  const [filter, setFilter] = useState<HulyListFilter>('assigned')
-  const [sort, setSort] = useState<SortOrder>('updated')
+  const settings = useAppStore((s) => s.settings)
+  const PAGE_SIZE = 50
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
+  const [loadMoreLoading, setLoadMoreLoading] = useState(false)
+  const validFilters: readonly HulyListFilter[] = ['assigned', 'created', 'all']
+  const validSorts: readonly SortOrder[] = ['updated', 'priority', 'identifier']
+  // Why: persist default filter/sort so a reload on the Huly tab lands on the
+  // same preset. Per-task default works just like GitHub's right-click
+  // "Set as default" — local to this task surface, not a global preference.
+  const [filter, setFilter] = useState<HulyListFilter>(
+    () => readPersisted(DEFAULT_FILTER_KEY, validFilters) ?? 'assigned'
+  )
+  const [sort, setSort] = useState<SortOrder>(
+    () => readPersisted(DEFAULT_SORT_KEY, validSorts) ?? 'updated'
+  )
+  const [defaultFilter, setDefaultFilter] = useState<HulyListFilter>(
+    () => readPersisted(DEFAULT_FILTER_KEY, validFilters) ?? 'assigned'
+  )
+  // default sort is read for symmetry with the filter default; UI to
+  // mutate it lands alongside the sort dropdown in a follow-up.
+  void defaultFilter
+  useState<SortOrder>(() => readPersisted(DEFAULT_SORT_KEY, validSorts) ?? 'updated')
   const [search, setSearch] = useState('')
   const [issues, setIssues] = useState<HulyIssue[]>([])
   const [loading, setLoading] = useState(false)
@@ -78,7 +111,7 @@ export function TaskPageHulyView({
     setLoading(true)
     setError(null)
     void listIssues(
-      { filter, limit: 50 },
+      { filter, limit: pageSize },
       { sourceContext, workspace: workspace ?? undefined }
     )
       .then((result) => {
@@ -173,20 +206,45 @@ export function TaskPageHulyView({
           ) : null}
           {FILTERS.map((preset) => {
             const active = filter === preset.id
+            const isDefault = defaultFilter === preset.id
             return (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => setFilter(preset.id)}
-                className={cn(
-                  'rounded-md border px-2.5 py-1 text-xs font-medium transition',
-                  active
-                    ? 'border-border/50 bg-foreground/90 text-background shadow-xs'
-                    : 'border-border/60 bg-background text-foreground shadow-xs hover:bg-muted/60'
-                )}
-              >
-                {preset.label}
-              </button>
+              <Tooltip key={preset.id}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setFilter(preset.id)}
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      window.localStorage.setItem(DEFAULT_FILTER_KEY, preset.id)
+                      setDefaultFilter(preset.id)
+                    }}
+                    className={cn(
+                      'relative rounded-md border px-2.5 py-1 text-xs font-medium transition',
+                      active
+                        ? 'border-border/50 bg-foreground/90 text-background shadow-xs'
+                        : 'border-border/60 bg-background text-foreground shadow-xs hover:bg-muted/60'
+                    )}
+                  >
+                    {preset.label}
+                    {isDefault ? (
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'absolute -right-1 -top-1 size-2 rounded-full',
+                          active
+                            ? 'bg-status-success ring-2 ring-background'
+                            : 'bg-status-success'
+                        )}
+                      />
+                    ) : null}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={4}>
+                  {isDefault
+                    ? 'Default preset — right-click to clear, click to switch'
+                    : 'Click to switch, right-click to set as default'}
+                </TooltipContent>
+              </Tooltip>
             )
           })}
         </div>
@@ -280,16 +338,46 @@ export function TaskPageHulyView({
       ) : null}
 
       {filtered.length > 0 ? (
-        <div className="divide-y divide-border/40">
-          {filtered.map((issue) => (
-            <HulyTaskRow
-              key={issue.id}
-              issue={issue}
-              showTeam={showTeam}
-              onOpen={(i) => setSelectedIssueId(i.id)}
-              onOpenInHuly={(i) => void window.api.shell.openUrl(i.url)}
-            />
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="divide-y divide-border/40">
+            {filtered.map((issue) => (
+              <HulyTaskRow
+                key={issue.id}
+                issue={issue}
+                showTeam={showTeam}
+                sourceContext={sourceContext}
+                settings={settings}
+                onOpen={(i) => setSelectedIssueId(i.id)}
+                onOpenInHuly={(i) => void window.api.shell.openUrl(i.url)}
+              />
+            ))}
+          </div>
+          {issues.length >= pageSize ? (
+            <div className="flex items-center justify-center border-t border-border/40 bg-muted/20 px-3 py-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={loadMoreLoading}
+                onClick={() => {
+                  setLoadMoreLoading(true)
+                  setPageSize((s) => s + PAGE_SIZE)
+                }}
+              >
+                {loadMoreLoading ? (
+                  <LoaderCircle className="size-3 animate-spin" />
+                ) : (
+                  <>Show more</>
+                )}
+              </Button>
+              <span className="ml-3 text-[11px] text-muted-foreground">
+                Showing {issues.length}
+              </span>
+            </div>
+          ) : (
+            <div className="border-t border-border/40 bg-muted/20 px-3 py-1.5 text-center text-[11px] text-muted-foreground">
+              {issues.length} issue{issues.length === 1 ? '' : 's'}
+            </div>
+          )}
         </div>
       ) : null}
 
