@@ -223,18 +223,34 @@ export type ListHulyIssuesArgs = {
   search?: string
   teamId?: string
   projectId?: string
+  /** Viewer email for `--assignee` server-side filter (CLI accepts email). */
+  viewerEmail?: string
+  /** Viewer UUID for client-side "created by me" filter. */
+  viewerUuid?: string
 }
 
 export async function listIssues(args: ListHulyIssuesArgs = {}): Promise<HulyIssue[]> {
   const cliArgs: string[] = ['issue', 'list']
   if (args.projectId) cliArgs.push('--project', args.projectId)
   if (args.teamId) cliArgs.push('--team', args.teamId)
-  if (args.search) cliArgs.push('--search', args.search)
-  if (args.filter === 'assigned') cliArgs.push('--mine')
+  if (args.search) cliArgs.push('--description-search', args.search)
+  // Why: `--mine` is not a flag in the huly CLI. Use `--assignee <email>` so
+  // the CLI resolves email → user UUID server-side; we always pass the
+  // viewer email (resolved from `whoami`) for the assigned filter.
+  if (args.filter === 'assigned' && args.viewerEmail) {
+    cliArgs.push('--assignee', args.viewerEmail)
+  }
   if (args.limit) cliArgs.push('--limit', String(args.limit))
   type Raw = Record<string, unknown>
   const raw = await runHulyCli<Raw[]>(cliArgs, { workspace: args.workspace })
-  return raw.map(toIssue).filter((issue): issue is HulyIssue => issue !== null)
+  const issues = raw.map(toIssue).filter((issue): issue is HulyIssue => issue !== null)
+  // Why: the huly CLI has no --created-by flag. Filter "created by me"
+  // client-side once we know the viewer's UUID; cache the UUID after the
+  // first assignee lookup so subsequent calls skip the email→UUID step.
+  if (args.filter === 'created' && args.viewerUuid) {
+    return issues.filter((issue) => issue.createdBy === args.viewerUuid)
+  }
+  return issues
 }
 
 export async function getIssue(id: string, workspace?: string): Promise<HulyIssue | null> {
@@ -424,6 +440,7 @@ function toIssue(raw: RawIssue): HulyIssue | null {
     labels: asStringArray(raw.labels),
     priority: asNumber(raw.priority),
     dueDate: asString(raw.dueDate) ?? null,
-    updatedAt: asString(raw.updatedAt) ?? asString(raw.updated_at) ?? new Date().toISOString()
+    updatedAt: asString(raw.updatedAt) ?? asString(raw.updated_at) ?? new Date().toISOString(),
+    ...(asString(raw.createdBy) ? { createdBy: asString(raw.createdBy)! } : {})
   }
 }

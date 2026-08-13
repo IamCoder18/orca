@@ -75,6 +75,8 @@ export type HulyListArgs = {
   search?: string
   projectId?: string
   teamId?: string
+  viewerEmail?: string
+  viewerUuid?: string
 }
 
 export function hulyListIssues(

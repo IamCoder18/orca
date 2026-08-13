@@ -17,7 +17,9 @@ const ListIssues = z
     workspace: OptionalString,
     search: OptionalPlainString,
     projectId: OptionalString,
-    teamId: OptionalString
+    teamId: OptionalString,
+    viewerEmail: OptionalString,
+    viewerUuid: OptionalString
   })
   .optional()
 
@@ -109,7 +111,9 @@ export const HULY_METHODS: RpcAnyMethod[] = [
         workspace: params?.workspace,
         search: params?.search,
         projectId: params?.projectId,
-        teamId: params?.teamId
+        teamId: params?.teamId,
+        viewerEmail: params?.viewerEmail,
+        viewerUuid: params?.viewerUuid
       })
   }),
   defineMethod({

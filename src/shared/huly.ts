@@ -66,6 +66,8 @@ export type HulyIssue = {
   priority: number
   dueDate?: string | null
   updatedAt: string
+  /** Why: server-side `createdBy` UUID powers client-side "created by me" filter. */
+  createdBy?: string
   // Why: optional metadata carried by the renderer when wiring the issue to
   // the new-workspace composer; the daemon never returns these.
   branchName?: string

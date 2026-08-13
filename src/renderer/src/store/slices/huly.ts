@@ -84,6 +84,7 @@ export type HulySlice = {
   hulyStatusChecked: boolean
   hulyStatusContextKey: string | null
   hulyPreflightStatus: HulyPreflight | null
+  hulyViewerUuid: string | null
   hulyListCache: Record<string, CacheEntry<HulyIssue[]>>
   hulyProjectsCache: Record<string, CacheEntry<HulyProjectSummary[]>>
   hulyTeamsCache: Record<string, CacheEntry<HulyTeamSummary[]>>
@@ -113,6 +114,7 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
   hulyStatusChecked: false,
   hulyStatusContextKey: null,
   hulyPreflightStatus: null,
+  hulyViewerUuid: null,
   hulyListCache: {},
   hulyProjectsCache: {},
   hulyTeamsCache: {},
@@ -174,7 +176,8 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
     set({
       hulyStatus: { ...initialHulyStatus },
       hulyStatusChecked: true,
-      hulyStatusContextKey: getProviderRuntimeContextKey(settings)
+      hulyStatusContextKey: getProviderRuntimeContextKey(settings),
+      hulyViewerUuid: null
     })
   },
 
@@ -188,18 +191,36 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
       return cached.data ?? []
     }
     try {
+      const viewerEmail = get().hulyStatus?.viewer?.email ?? undefined
       const issues = await hulyListIssues(ctx, {
         filter,
         limit,
-        workspace: options?.workspace ?? undefined
+        workspace: options?.workspace ?? undefined,
+        viewerEmail
       })
+      // Why: `whoami` doesn't expose the viewer's UUID and the huly CLI has
+      // no `--created-by` flag. Cache the viewer's UUID from the first issue
+      // we fetched for "assigned" (server-side `--assignee <email>` returns
+      // issues whose assignee UUID is ours) so subsequent "created by me"
+      // queries can filter client-side.
+      if (filter === 'assigned' && viewerEmail && !get().hulyViewerUuid) {
+        const viewerUuid = issues.find((issue) => issue.assignee?.email === viewerEmail)?.assignee?.id
+        if (viewerUuid) {
+          set({ hulyViewerUuid: viewerUuid })
+        }
+      }
+      const viewerUuid = get().hulyViewerUuid
+      const filtered =
+        filter === 'created' && viewerUuid
+          ? issues.filter((issue) => issue.createdBy === viewerUuid)
+          : issues
       set((state) => ({
         hulyListCache: evictStaleEntries({
           ...state.hulyListCache,
-          [cacheKey]: { data: issues, fetchedAt: Date.now() }
+          [cacheKey]: { data: filtered, fetchedAt: Date.now() }
         })
       }))
-      return issues
+      return filtered
     } catch (error) {
       console.warn('[huly] listIssues failed', error)
       return []
