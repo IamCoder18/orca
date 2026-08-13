@@ -772,20 +772,15 @@ import {
 import {
   addComment as addHulyCommentRpc,
   createIssue as createHulyIssueRpc,
-  createProject as createHulyProjectRpc,
   disableHuly,
   enableHuly,
   getHulyPreflight,
   getHulyStatus,
   getIssue as getHulyIssueRpc,
-  getProject as getHulyProjectRpc,
-  getTeamLabels as getHulyTeamLabelsRpc,
-  getTeamMembers as getHulyTeamMembersRpc,
   getTeamStates as getHulyTeamStatesRpc,
   listComments as listHulyCommentsRpc,
   listIssues as listHulyIssuesRpc,
   listProjects as listHulyProjectsRpc,
-  listTeams as listHulyTeamsRpc,
   resetHulyPreflightCache,
   updateIssue as updateHulyIssueRpc,
   type ListHulyIssuesArgs
@@ -793,8 +788,7 @@ import {
 import type {
   HulyCommentCreateArgs,
   HulyIssueCreateArgs,
-  HulyIssueUpdate,
-  HulyProjectCreateArgs
+  HulyIssueUpdate
 } from '../../shared/huly'
 import {
   connect as connectJira,
@@ -34678,28 +34672,8 @@ export class OrcaRuntimeService {
     return listHulyProjectsRpc(workspace)
   }
 
-  hulyGetProject(id: string, workspace?: string): ReturnType<typeof getHulyProjectRpc> {
-    return getHulyProjectRpc(id, workspace)
-  }
-
-  hulyCreateProject(args: HulyProjectCreateArgs, workspace?: string): ReturnType<typeof createHulyProjectRpc> {
-    return createHulyProjectRpc(args, workspace)
-  }
-
-  hulyListTeams(workspace?: string): ReturnType<typeof listHulyTeamsRpc> {
-    return listHulyTeamsRpc(workspace)
-  }
-
-  hulyGetTeamMembers(teamId: string, workspace?: string): ReturnType<typeof getHulyTeamMembersRpc> {
-    return getHulyTeamMembersRpc(teamId, workspace)
-  }
-
   hulyGetTeamStates(teamId: string, workspace?: string): ReturnType<typeof getHulyTeamStatesRpc> {
     return getHulyTeamStatesRpc(teamId, workspace)
-  }
-
-  hulyGetTeamLabels(teamId: string, workspace?: string): ReturnType<typeof getHulyTeamLabelsRpc> {
-    return getHulyTeamLabelsRpc(teamId, workspace)
   }
 
   // ── Jira integration ──

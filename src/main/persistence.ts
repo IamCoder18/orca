@@ -132,7 +132,8 @@ import {
   normalizeAgentActivityDisplayMode,
   normalizeWorktreeCardProperties,
   ONBOARDING_FLOW_VERSION,
-  ONBOARDING_FINAL_STEP
+  ONBOARDING_FINAL_STEP,
+  HULY_ROLLOUT_ENABLED
 } from '../shared/constants'
 import { parseWorkspaceSessionSalvaging } from '../shared/workspace-session-salvage'
 import { normalizeUsagePercentageDisplay } from '../shared/usage-percentage-display'
@@ -3271,11 +3272,18 @@ export class Store {
             : [...rawTaskProviderSettings.visibleTaskProviders, 'jira' as const]
         const visibleTaskProvidersDefaultedForHuly =
           parsed.settings?.visibleTaskProvidersDefaultedForHuly === true
-        const migratedVisibleTaskProvidersWithHuly = visibleTaskProvidersDefaultedForHuly
-          ? migratedVisibleTaskProviders
-          : migratedVisibleTaskProviders.includes('huly')
+        // Why: when the build-time HULY_ROLLOUT_ENABLED gate is off, skip the
+        // one-shot migration so Huly stays hidden for everyone until a new
+        // build flips the constant back on. The per-profile
+        // `visibleTaskProvidersDefaultedForHuly` flag is user-controlled and
+        // cannot be flipped fleet-wide without a new build, so it cannot
+        // serve as the gate.
+        const migratedVisibleTaskProvidersWithHuly =
+          !HULY_ROLLOUT_ENABLED || visibleTaskProvidersDefaultedForHuly
             ? migratedVisibleTaskProviders
-            : [...migratedVisibleTaskProviders, 'huly' as const]
+            : migratedVisibleTaskProviders.includes('huly')
+              ? migratedVisibleTaskProviders
+              : [...migratedVisibleTaskProviders, 'huly' as const]
         const taskProviderSettings = normalizeTaskProviderSettings({
           visibleTaskProviders: migratedVisibleTaskProvidersWithHuly,
           defaultTaskSource: rawTaskProviderSettings.defaultTaskSource
@@ -3482,7 +3490,7 @@ export class Store {
             defaultTaskSource: taskProviderSettings.defaultTaskSource,
             visibleTaskProviders: taskProviderSettings.visibleTaskProviders,
             visibleTaskProvidersDefaultedForJira: true,
-            visibleTaskProvidersDefaultedForHuly: true,
+            visibleTaskProvidersDefaultedForHuly: HULY_ROLLOUT_ENABLED,
             terminalShortcutPolicy: normalizeTerminalShortcutPolicy(
               parsed.settings?.terminalShortcutPolicy
             ),
@@ -5876,7 +5884,7 @@ export class Store {
       sanitizedUpdates.visibleTaskProviders = taskProviderSettings.visibleTaskProviders
       if ('visibleTaskProviders' in updates) {
         sanitizedUpdates.visibleTaskProvidersDefaultedForJira = true
-        sanitizedUpdates.visibleTaskProvidersDefaultedForHuly = true
+        sanitizedUpdates.visibleTaskProvidersDefaultedForHuly = HULY_ROLLOUT_ENABLED
       }
     }
     if ('autoRenameBranchFromWork' in updates || 'autoRenameBranchFromWorkDefaultedOn' in updates) {

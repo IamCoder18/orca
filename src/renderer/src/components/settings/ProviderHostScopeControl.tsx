@@ -46,23 +46,21 @@ export function ProviderHostScopeControl({
           </span>
           <div className="mt-0.5 text-muted-foreground">{scope.description}</div>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="shrink-0"
-          onClick={openHostsSettings}
-        >
-          {showOpenServersAction ? (
-            <>
-              <ServerCog className="size-3.5" />
-              {translate(
-                'auto.components.settings.ProviderHostScopeControl.change_host',
-                'Open Remote Servers'
-              )}
-            </>
-          ) : null}
-        </Button>
+        {showOpenServersAction ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="shrink-0"
+            onClick={openHostsSettings}
+          >
+            <ServerCog className="size-3.5" />
+            {translate(
+              'auto.components.settings.ProviderHostScopeControl.change_host',
+              'Open Remote Servers'
+            )}
+          </Button>
+        ) : null}
       </div>
     </div>
   )

@@ -6,8 +6,7 @@ import type {
   HulyIssueUpdate,
   HulyListFilter,
   HulyPreflight,
-  HulyProjectSummary,
-  HulyTeamSummary
+  HulyProjectSummary
 } from '../../../../shared/huly'
 import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
 import type { AppState } from '../types'
@@ -21,7 +20,6 @@ import {
   hulyEnable,
   hulyListIssues,
   hulyListProjects,
-  hulyListTeams,
   hulyPreflight,
   hulyStatus,
   hulyUpdateIssue
@@ -87,7 +85,6 @@ export type HulySlice = {
   hulyViewerUuid: string | null
   hulyListCache: Record<string, CacheEntry<HulyIssue[]>>
   hulyProjectsCache: Record<string, CacheEntry<HulyProjectSummary[]>>
-  hulyTeamsCache: Record<string, CacheEntry<HulyTeamSummary[]>>
 
   checkHulyConnection: (force?: boolean) => Promise<void>
   refreshHulyPreflight: () => Promise<void>
@@ -99,7 +96,6 @@ export type HulySlice = {
   updateHulyIssue: (id: string, update: HulyIssueUpdate, options?: HulyFetchOptions) => Promise<HulyIssue | null>
 
   listHulyProjects: (options?: HulyFetchOptions) => Promise<HulyProjectSummary[]>
-  listHulyTeams: (options?: HulyFetchOptions) => Promise<HulyTeamSummary[]>
 }
 
 const initialHulyStatus: HulyConnectionStatus = {
@@ -109,6 +105,12 @@ const initialHulyStatus: HulyConnectionStatus = {
   workspaces: []
 }
 
+// Why: dedup concurrent listIssues / listProjects calls so multiple
+// subscribers coalesce into a single CLI invocation (mirrors
+// `inflightListRequests` in the Linear slice).
+const inflightListRequests = new Map<string, Promise<HulyIssue[]>>()
+const inflightProjectsRequests = new Map<string, Promise<HulyProjectSummary[]>>()
+
 export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, get) => ({
   hulyStatus: null,
   hulyStatusChecked: false,
@@ -117,7 +119,6 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
   hulyViewerUuid: null,
   hulyListCache: {},
   hulyProjectsCache: {},
-  hulyTeamsCache: {},
 
   async checkHulyConnection(force = false) {
     const settings = get().settings
@@ -190,21 +191,25 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
     if (!options?.force && isFresh(cached)) {
       return cached.data ?? []
     }
-    try {
-      const viewerEmail = get().hulyStatus?.viewer?.email ?? undefined
-      const issues = await hulyListIssues(ctx, {
-        filter,
-        limit,
-        workspace: options?.workspace ?? undefined,
-        viewerEmail
-      })
+    const inflight = inflightListRequests.get(cacheKey)
+    if (inflight) return inflight
+    const promise = (async () => {
+      try {
+        const viewerEmail = get().hulyStatus?.viewer?.email ?? undefined
+        const issues = await hulyListIssues(ctx, {
+          filter,
+          limit,
+          workspace: options?.workspace ?? undefined,
+          viewerEmail
+        })
       // Why: `whoami` doesn't expose the viewer's UUID and the huly CLI has
-      // no `--created-by` flag. Cache the viewer's UUID from the first issue
-      // we fetched for "assigned" (server-side `--assignee <email>` returns
-      // issues whose assignee UUID is ours) so subsequent "created by me"
-      // queries can filter client-side.
+      // no `--created-by` flag. The CLI's `--assignee <email>` resolves the
+      // email to a UUID server-side, so the assignee.id of any returned
+      // issue IS the viewer's UUID. This also works when the CLI returns the
+      // ID-only shape (no nested email) — we just trust the first assignee.id
+      // we see.
       if (filter === 'assigned' && viewerEmail && !get().hulyViewerUuid) {
-        const viewerUuid = issues.find((issue) => issue.assignee?.email === viewerEmail)?.assignee?.id
+        const viewerUuid = issues.find((issue) => issue.assignee?.id)?.assignee?.id
         if (viewerUuid) {
           set({ hulyViewerUuid: viewerUuid })
         }
@@ -220,11 +225,16 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
           [cacheKey]: { data: filtered, fetchedAt: Date.now() }
         })
       }))
-      return filtered
-    } catch (error) {
+return filtered
+      } catch (error) {
       console.warn('[huly] listIssues failed', error)
       return []
+    } finally {
+      inflightListRequests.delete(cacheKey)
     }
+    })()
+    inflightListRequests.set(cacheKey, promise)
+    return promise
   },
 
   async createHulyIssue(args, options) {
@@ -254,7 +264,23 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
   async updateHulyIssue(id, update, options) {
     const ctx = hulyCallContext(options?.sourceContext)
     try {
-      return await hulyUpdateIssue(ctx, id, update, options?.workspace ?? undefined)
+      const updated = await hulyUpdateIssue(ctx, id, update, options?.workspace ?? undefined)
+      if (updated) {
+        const scope = hulyCacheScope(options?.sourceContext)
+        const workspaceKey = workspacePart(options?.workspace)
+        set((state) => {
+          const next = { ...state.hulyListCache }
+          for (const key of Object.keys(next)) {
+            if (!key.startsWith(`${scope}::${workspaceKey}::`)) continue
+            const entry = next[key]
+            if (!entry?.data) continue
+            const patched = entry.data.map((issue) => (issue.id === id ? updated : issue))
+            next[key] = { data: patched, fetchedAt: entry.fetchedAt }
+          }
+          return { hulyListCache: evictStaleEntries(next) }
+        })
+      }
+      return updated
     } catch (error) {
       console.warn('[huly] updateIssue failed', error)
       return null
@@ -268,40 +294,26 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
     if (!options?.force && isFresh(cached)) {
       return cached.data ?? []
     }
-    try {
-      const projects = await hulyListProjects(ctx, options?.workspace ?? undefined)
+    const inflight = inflightProjectsRequests.get(cacheKey)
+    if (inflight) return inflight
+    const promise = (async () => {
+      try {
+        const projects = await hulyListProjects(ctx, options?.workspace ?? undefined)
       set((state) => ({
         hulyProjectsCache: evictStaleEntries({
           ...state.hulyProjectsCache,
           [cacheKey]: { data: projects, fetchedAt: Date.now() }
         })
       }))
-      return projects
+return projects
     } catch (error) {
       console.warn('[huly] listProjects failed', error)
       return []
+    } finally {
+      inflightProjectsRequests.delete(cacheKey)
     }
-  },
-
-  async listHulyTeams(options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}`
-    const cached = get().hulyTeamsCache[cacheKey]
-    if (!options?.force && isFresh(cached)) {
-      return cached.data ?? []
-    }
-    try {
-      const teams = await hulyListTeams(ctx, options?.workspace ?? undefined)
-      set((state) => ({
-        hulyTeamsCache: evictStaleEntries({
-          ...state.hulyTeamsCache,
-          [cacheKey]: { data: teams, fetchedAt: Date.now() }
-        })
-      }))
-      return teams
-    } catch (error) {
-      console.warn('[huly] listTeams failed', error)
-      return []
-    }
+    })()
+    inflightProjectsRequests.set(cacheKey, promise)
+    return promise
   }
 })

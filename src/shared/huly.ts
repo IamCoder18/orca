@@ -23,12 +23,6 @@ export type HulyIssueState = {
   color?: string
 }
 
-export type HulyLabel = {
-  id: string
-  name: string
-  color?: string
-}
-
 export type HulyTeamMember = {
   id: string
   displayName: string
@@ -48,6 +42,7 @@ export type HulyProjectSummary = {
   workspaceName?: string
   workspaceUrl?: string
   url?: string
+  team?: { id: string; name: string; key?: string }
 }
 
 export type HulyIssue = {
@@ -68,9 +63,6 @@ export type HulyIssue = {
   updatedAt: string
   /** Why: server-side `createdBy` UUID powers client-side "created by me" filter. */
   createdBy?: string
-  // Why: optional metadata carried by the renderer when wiring the issue to
-  // the new-workspace composer; the daemon never returns these.
-  branchName?: string
 }
 
 export type HulyComment = {
@@ -102,12 +94,6 @@ export type HulyIssueCreateArgs = {
 export type HulyCommentCreateArgs = {
   issueId: string
   body: string
-}
-
-export type HulyProjectCreateArgs = {
-  name: string
-  description?: string
-  workspaceName?: string
 }
 
 export type HulyCliCallOptions = {

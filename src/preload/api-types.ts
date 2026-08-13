@@ -296,13 +296,9 @@ import type {
   HulyIssue,
   HulyIssueCreateArgs,
   HulyIssueUpdate,
-  HulyLabel,
   HulyListFilter,
   HulyPreflight,
-  HulyProjectCreateArgs,
   HulyProjectSummary,
-  HulyTeamMember,
-  HulyTeamSummary,
   HulyIssueState
 } from '../shared/huly'
 import type { PtyModelRestoreNeededEvent } from '../shared/pty-model-restore-marker'
@@ -2416,14 +2412,7 @@ export type PreloadApi = {
     ) => Promise<HulyComment | null>
     listComments: (args: { issueId: string; workspace?: string }) => Promise<HulyComment[]>
     listProjects: (args?: { workspace?: string }) => Promise<HulyProjectSummary[]>
-    getProject: (args: { id: string; workspace?: string }) => Promise<HulyProjectSummary | null>
-    createProject: (
-      args: HulyProjectCreateArgs & { workspace?: string }
-    ) => Promise<HulyProjectSummary | null>
-    listTeams: (args?: { workspace?: string }) => Promise<HulyTeamSummary[]>
-    getTeamMembers: (args: { teamId: string; workspace?: string }) => Promise<HulyTeamMember[]>
     getTeamStates: (args: { teamId: string; workspace?: string }) => Promise<HulyIssueState[]>
-    getTeamLabels: (args: { teamId: string; workspace?: string }) => Promise<HulyLabel[]>
   }
   starNag: {
     onShow: (

@@ -40,6 +40,7 @@ export type HulyWorkspaceSource = WorkspaceSourceLinkedItem & {
   provider: 'huly'
   type: 'issue'
   hulyIdentifier?: string
+  hulyTitle?: string
   hulyWorkspaceName?: string
 }
 
@@ -168,7 +169,7 @@ export function buildJiraWorkspaceSource(
 }
 
 export function buildHulyWorkspaceSource(
-  issue: Pick<HulyIssue, 'identifier' | 'title' | 'url' | 'workspaceName' | 'branchName'>
+  issue: Pick<HulyIssue, 'identifier' | 'title' | 'url' | 'workspaceName'>
 ): HulyWorkspaceSource {
   return {
     provider: 'huly',
@@ -177,9 +178,17 @@ export function buildHulyWorkspaceSource(
     title: issue.title,
     url: issue.url,
     hulyIdentifier: issue.identifier,
-    ...(issue.workspaceName ? { hulyWorkspaceName: issue.workspaceName } : {}),
-    ...(issue.branchName ? { hulyBranchName: issue.branchName } : {})
+    hulyTitle: issue.title,
+    ...(issue.workspaceName ? { hulyWorkspaceName: issue.workspaceName } : {})
   }
+}
+
+export function getUsableHulyBranchName(
+  branchName: string | null | undefined
+): string {
+  // Why: only a non-blank normalized value can safely enter the exact git-ref
+  // override path; missing values must keep Orca's generated-name fallback.
+  return branchName?.trim() ?? ''
 }
 
 export function shouldApplyWorkspaceSourceAutoName(args: {

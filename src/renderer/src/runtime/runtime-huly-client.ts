@@ -4,13 +4,9 @@ import type {
   HulyIssue,
   HulyIssueCreateArgs,
   HulyIssueUpdate,
-  HulyLabel,
   HulyListFilter,
   HulyPreflight,
-  HulyProjectCreateArgs,
   HulyProjectSummary,
-  HulyTeamMember,
-  HulyTeamSummary,
   HulyIssueState
 } from '../../../shared/huly'
 import type { GlobalSettings } from '../../../shared/types'
@@ -68,7 +64,7 @@ export function hulyPreflight(settings: RuntimeHulySettings): Promise<HulyPrefli
   return env<HulyPreflight>(getHulyRuntimeTarget(settings), 'huly.preflight', undefined, 10_000)
 }
 
-export type HulyListArgs = {
+type HulyListArgs = {
   filter?: HulyListFilter
   limit?: number
   workspace?: string
@@ -151,53 +147,6 @@ export function hulyListProjects(
   )
 }
 
-export function hulyGetProject(
-  settings: RuntimeHulySettings,
-  id: string,
-  workspace?: string
-): Promise<HulyProjectSummary | null> {
-  return env<HulyProjectSummary | null>(
-    getHulyRuntimeTarget(settings),
-    'huly.getProject',
-    { id, workspace }
-  )
-}
-
-export function hulyCreateProject(
-  settings: RuntimeHulySettings,
-  args: HulyProjectCreateArgs,
-  workspace?: string
-): Promise<HulyProjectSummary | null> {
-  return env<HulyProjectSummary | null>(
-    getHulyRuntimeTarget(settings),
-    'huly.createProject',
-    { ...args, workspace }
-  )
-}
-
-export function hulyListTeams(
-  settings: RuntimeHulySettings,
-  workspace?: string
-): Promise<HulyTeamSummary[]> {
-  return env<HulyTeamSummary[]>(
-    getHulyRuntimeTarget(settings),
-    'huly.listTeams',
-    { workspace }
-  )
-}
-
-export function hulyGetTeamMembers(
-  settings: RuntimeHulySettings,
-  teamId: string,
-  workspace?: string
-): Promise<HulyTeamMember[]> {
-  return env<HulyTeamMember[]>(
-    getHulyRuntimeTarget(settings),
-    'huly.getTeamMembers',
-    { teamId, workspace }
-  )
-}
-
 export function hulyGetTeamStates(
   settings: RuntimeHulySettings,
   teamId: string,
@@ -206,18 +155,6 @@ export function hulyGetTeamStates(
   return env<HulyIssueState[]>(
     getHulyRuntimeTarget(settings),
     'huly.getTeamStates',
-    { teamId, workspace }
-  )
-}
-
-export function hulyGetTeamLabels(
-  settings: RuntimeHulySettings,
-  teamId: string,
-  workspace?: string
-): Promise<HulyLabel[]> {
-  return env<HulyLabel[]>(
-    getHulyRuntimeTarget(settings),
-    'huly.getTeamLabels',
     { teamId, workspace }
   )
 }

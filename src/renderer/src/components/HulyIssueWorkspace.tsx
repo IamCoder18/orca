@@ -1,35 +1,35 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, LoaderCircle, RefreshCw, Send, X } from 'lucide-react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  ArrowRight,
+  LoaderCircle,
+  RefreshCw,
+  Send,
+  X
+} from 'lucide-react'
 import { toast } from 'sonner'
+import { VisuallyHidden } from 'radix-ui'
 import { HulyIcon } from '@/components/icons/HulyIcon'
+import CommentMarkdown from '@/components/sidebar/CommentMarkdown'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
 import { hulyAddComment, hulyGetIssue, hulyGetTeamStates, hulyListComments, hulyUpdateIssue } from '@/runtime/runtime-huly-client'
 import type { HulyComment, HulyIssue, HulyIssueState } from '../../../shared/huly'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
-import { PRIORITY_LABEL, stateToneClasses } from '@/lib/huly-presentation'
+import { getHulyPriorityLabel, stateToneClasses } from '@/lib/huly-presentation'
+import { buildHulyPrompt } from '@/lib/huly-issue-workspace-helpers'
 import { formatUiRelativeTimeFromDate } from '@/i18n/relative-time-format'
+import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
+import { HulyIssueActionSidebar } from './HulyIssueActionSidebar'
 
 type Props = {
   issue: HulyIssue
   onUse: (issue: HulyIssue) => void
   onClose: () => void
   sourceContext?: TaskSourceContext | null
-}
-
-function buildBranchName(issue: HulyIssue): string {
-  const slug = issue.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 52)
-  return `${issue.identifier.toLowerCase()}${slug ? `-${slug}` : ''}`
-}
-
-function buildPrompt(issue: HulyIssue): string {
-  return `Complete Huly issue ${issue.identifier}: ${issue.title}\n\n${issue.url}`
 }
 
 export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Props): React.JSX.Element {
@@ -41,20 +41,27 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
   const [fullIssue, setFullIssue] = useState<HulyIssue>(issue)
   const [comments, setComments] = useState<HulyComment[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentsError, setCommentsError] = useState<string | null>(null)
   const [states, setStates] = useState<HulyIssueState[]>([])
   const [commentDraft, setCommentDraft] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
   const [savingState, setSavingState] = useState(false)
+  const requestIdRef = useRef(0)
 
-  const loadComments = useCallback(async (): Promise<void> => {
+  const loadComments = useCallback(async (requestId: number): Promise<void> => {
     setCommentsLoading(true)
+    setCommentsError(null)
     try {
       const fetched = await hulyListComments(providerSettings, issue.id, workspace ?? undefined)
+      if (requestId !== requestIdRef.current) return
       setComments(fetched)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load comments.')
+      if (requestId !== requestIdRef.current) return
+      setCommentsError(error instanceof Error ? error.message : 'Failed to load comments.')
     } finally {
-      setCommentsLoading(false)
+      if (requestId === requestIdRef.current) {
+        setCommentsLoading(false)
+      }
     }
   }, [providerSettings, issue.id, workspace])
 
@@ -86,7 +93,8 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
         }
       }
       if (cancelled) return
-      await Promise.all([loadComments(), loadTeamStates()])
+      requestIdRef.current += 1
+      await Promise.all([loadComments(requestIdRef.current), loadTeamStates()])
     })()
     return () => {
       cancelled = true
@@ -104,12 +112,16 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
       )
       if (updated) {
         setFullIssue(updated)
-        toast.success('State updated.')
+        toast.success(translate('auto.components.huly.issueWorkspace.stateUpdated', 'State updated.'))
       } else {
-        toast.error('State update returned no result.')
+        toast.error(translate('auto.components.huly.issueWorkspace.stateUpdateFailed', 'State update returned no result.'))
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update state.')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : translate('auto.components.huly.issueWorkspace.stateUpdateError', 'Failed to update state.')
+      )
     } finally {
       setSavingState(false)
     }
@@ -129,10 +141,14 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
         setComments((prev) => [created, ...prev])
         setCommentDraft('')
       } else {
-        toast.error('Failed to post comment.')
+        toast.error(translate('auto.components.huly.issueWorkspace.commentPostFailed', 'Failed to post comment.'))
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to post comment.')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : translate('auto.components.huly.issueWorkspace.commentPostError', 'Failed to post comment.')
+      )
     } finally {
       setSubmittingComment(false)
     }
@@ -141,129 +157,234 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
   const handleUse = (): void => {
     onUse({
       ...fullIssue,
-      branchName: buildBranchName(fullIssue),
-      description: fullIssue.description ?? buildPrompt(fullIssue)
+      description: fullIssue.description ?? buildHulyPrompt(fullIssue)
     })
   }
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-xl">
-        <SheetTitle className="sr-only">Huly issue {fullIssue.identifier}</SheetTitle>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="flex w-full flex-col gap-0 sm:max-w-xl"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <VisuallyHidden.Root asChild>
+          <SheetTitle>{fullIssue.title}</SheetTitle>
+        </VisuallyHidden.Root>
+        <VisuallyHidden.Root asChild>
+          <SheetDescription>
+            {translate('auto.components.huly.issueWorkspace.description', 'Preview, edit, and start work from the selected Huly issue.')}
+          </SheetDescription>
+        </VisuallyHidden.Root>
+
         <div className="flex items-start gap-3 border-b border-border/60 px-4 py-3">
           <HulyIcon className="mt-1 size-5 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-xs text-muted-foreground">{fullIssue.identifier}</p>
-            <h2 className="truncate text-base font-semibold">{fullIssue.title}</h2>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {fullIssue.workspaceName ? `${fullIssue.workspaceName} / ${fullIssue.team.name}` : fullIssue.team.name}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+              <span className="font-mono">{fullIssue.identifier}</span>
+              {fullIssue.workspaceName ? <span>{fullIssue.workspaceName}</span> : null}
+              <span>{fullIssue.team.name}</span>
+              <span>{formatUiRelativeTimeFromDate(fullIssue.updatedAt)}</span>
+            </div>
+            <h2 className="mt-1 truncate text-base font-semibold">{fullIssue.title}</h2>
           </div>
-          <Button variant="ghost" size="icon-xs" onClick={onClose}>
-            <X className="size-3.5" />
+          <Button
+            size="sm"
+            onClick={handleUse}
+            className="hidden shrink-0 gap-2 sm:inline-flex"
+          >
+            {translate('auto.components.huly.issueWorkspace.useInWorktree', 'Use in Worktree')}
+            <ArrowRight className="size-3.5" />
           </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-xs" onClick={onClose}>
+                <X className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={6}>
+              {translate('auto.components.huly.issueWorkspace.close', 'Close')}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="flex flex-wrap gap-2">
-            <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${stateToneClasses(fullIssue.state.type)}`}
-            >
-              {fullIssue.state.name}
-            </span>
-            {fullIssue.priority > 0 ? (
-              <span className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                {PRIORITY_LABEL[fullIssue.priority] ?? `Priority ${fullIssue.priority}`}
-              </span>
-            ) : null}
-            {fullIssue.assignee ? (
-              <span className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                {fullIssue.assignee.displayName}
-              </span>
-            ) : (
-              <span className="text-[11px] text-muted-foreground/70">Unassigned</span>
-            )}
-          </div>
-
-          {states.length > 0 ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">State:</span>
-              <select
-                value={fullIssue.state.id}
-                disabled={savingState}
-                onChange={(e) => void handleChangeState(e.target.value)}
-                className="h-7 rounded-md border border-border bg-background px-2 text-xs"
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="scrollbar-sleek flex-1 overflow-y-auto px-4 py-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                  stateToneClasses(fullIssue.state.type)
+                )}
               >
-                {states.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              {savingState ? <LoaderCircle className="size-3 animate-spin text-muted-foreground" /> : null}
-            </div>
-          ) : null}
+                {fullIssue.state.name}
+              </span>
+              {fullIssue.priority > 0 ? (
+                <span className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {getHulyPriorityLabel(fullIssue.priority)}
+                </span>
+              ) : null}
+              <span className="text-[11px] text-muted-foreground">
+                {fullIssue.assignee?.displayName ??
+                  translate('auto.components.huly.issueWorkspace.unassigned', 'Unassigned')}
+              </span>
 
-          {fullIssue.description ? (
-            <div className="mt-4 rounded-md border border-border/60 bg-muted/30 p-3">
-              <pre className="scrollbar-sleek whitespace-pre-wrap text-xs text-foreground">
-                {fullIssue.description}
-              </pre>
-            </div>
-          ) : null}
-
-          <div className="mt-6">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-foreground">
-                Comments ({comments.length})
-              </p>
-              <Button variant="ghost" size="xs" onClick={() => void loadComments()} disabled={commentsLoading}>
-                <RefreshCw className={`size-3 ${commentsLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
-
-            <div className="mt-2 flex flex-col gap-2">
-              <Input
-                placeholder="Add a comment…"
-                value={commentDraft}
-                onChange={(e) => setCommentDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    void handleAddComment()
-                  }
-                }}
-                disabled={submittingComment}
-              />
-              <div className="flex justify-end">
-                <Button size="xs" onClick={() => void handleAddComment()} disabled={!commentDraft.trim() || submittingComment}>
-                  {submittingComment ? <LoaderCircle className="size-3 animate-spin" /> : <Send className="size-3" />}
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {comments.map((comment) => (
-                <div key={comment.id} className="rounded-md border border-border/40 bg-muted/20 p-3 text-xs">
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span className="font-medium text-foreground">{comment.user?.displayName ?? 'You'}</span>
-                    <span>{formatUiRelativeTimeFromDate(comment.createdAt)}</span>
-                  </div>
-                  <pre className="mt-1 whitespace-pre-wrap text-foreground">{comment.body}</pre>
-                </div>
-              ))}
-              {comments.length === 0 && !commentsLoading ? (
-                <p className="text-xs text-muted-foreground/70">No comments yet.</p>
+              {states.length > 0 ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={savingState}
+                      className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:bg-muted/40 disabled:opacity-50"
+                    >
+                      <span>{translate('auto.components.huly.issueWorkspace.stateLabel', 'State:')}</span>
+                      <span className="font-medium text-foreground/80">{fullIssue.state.name}</span>
+                      {savingState ? <LoaderCircle className="size-3 animate-spin" /> : null}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="popover-scroll-content scrollbar-sleek w-52 p-1"
+                    align="start"
+                  >
+                    {states.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={s.id === fullIssue.state.id || savingState}
+                        onClick={() => void handleChangeState(s.id)}
+                        className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-[12px] hover:bg-accent disabled:opacity-50"
+                      >
+                        <span>{s.name}</span>
+                        {s.id === fullIssue.state.id ? (
+                          <span className="text-[10px] text-muted-foreground">
+                            {translate('auto.components.huly.issueWorkspace.currentState', 'current')}
+                          </span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
               ) : null}
             </div>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2 border-t border-border/60 px-4 py-3">
-          <Button size="sm" onClick={handleUse} className="flex-1">
-            <ArrowRight className="mr-1.5 size-3.5" />
-            Use in Worktree
-          </Button>
+            {fullIssue.description ? (
+              <div className="mt-4">
+                <CommentMarkdown
+                  content={fullIssue.description}
+                  variant="document"
+                  className="text-[13px] leading-relaxed"
+                />
+              </div>
+            ) : null}
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-foreground">
+                  {translate('auto.components.huly.issueWorkspace.commentsTitle', 'Comments ({count})', {
+                    values: { count: comments.length }
+                  })}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    requestIdRef.current += 1
+                    void loadComments(requestIdRef.current)
+                  }}
+                  disabled={commentsLoading}
+                >
+                  <RefreshCw className={`size-3 ${commentsLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+
+              {commentsError ? (
+                <div className="mt-2 flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <span>{commentsError}</span>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => {
+                      requestIdRef.current += 1
+                      void loadComments(requestIdRef.current)
+                    }}
+                    disabled={commentsLoading}
+                    className="gap-1"
+                  >
+                    {commentsLoading ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3" />
+                    )}
+                    {translate('auto.components.huly.issueWorkspace.retry', 'Retry')}
+                  </Button>
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex flex-col gap-2">
+                <textarea
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      void handleAddComment()
+                    }
+                  }}
+                  placeholder={translate('auto.components.huly.issueWorkspace.commentPlaceholder', 'Add a comment…')}
+                  rows={2}
+                  disabled={submittingComment}
+                  className="min-h-10 flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="xs"
+                    onClick={() => void handleAddComment()}
+                    disabled={!commentDraft.trim() || submittingComment}
+                  >
+                    {submittingComment ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : (
+                      <Send className="size-3" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {comments.map((comment) => (
+                  <div key={comment.id} className="rounded-md border border-border/40 bg-muted/20 p-3 text-xs">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                      {comment.user?.displayName ??
+                        translate('auto.components.huly.issueWorkspace.you', 'You')}
+                    </span>
+                      <span>{formatUiRelativeTimeFromDate(comment.createdAt)}</span>
+                    </div>
+                    <div className="mt-1">
+                      <CommentMarkdown
+                        content={comment.body}
+                        className="text-[12px] leading-relaxed"
+                      />
+                    </div>
+                  </div>
+                ))}
+                {comments.length === 0 && !commentsLoading && !commentsError ? (
+                  <p className="text-xs text-muted-foreground/70">
+                    {translate('auto.components.huly.issueWorkspace.noComments', 'No comments yet.')}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <aside className="hidden w-44 shrink-0 border-t border-border/50 bg-muted/20 px-3 py-3 xl:block xl:border-l xl:border-t-0">
+            <Button onClick={handleUse} className="mb-3 w-full gap-2">
+              {translate('auto.components.huly.issueWorkspace.useInWorktree', 'Use in Worktree')}
+              <ArrowRight className="size-3.5" />
+            </Button>
+            <HulyIssueActionSidebar issue={fullIssue} />
+          </aside>
         </div>
       </SheetContent>
     </Sheet>

@@ -116,13 +116,9 @@ import type {
   HulyIssueCreateArgs,
   HulyIssueState,
   HulyIssueUpdate,
-  HulyLabel,
   HulyListFilter,
   HulyPreflight,
-  HulyProjectCreateArgs,
-  HulyProjectSummary,
-  HulyTeamMember,
-  HulyTeamSummary
+  HulyProjectSummary
 } from '../shared/huly'
 import type { PtyModelRestoreNeededEvent } from '../shared/pty-model-restore-marker'
 import type { PtyListedSession } from '../shared/pty-listed-session'
@@ -2004,25 +2000,10 @@ const api = {
       ipcRenderer.invoke('huly:listComments', args),
     listProjects: (args?: { workspace?: string }): Promise<HulyProjectSummary[]> =>
       ipcRenderer.invoke('huly:listProjects', args ?? {}),
-    getProject: (args: { id: string; workspace?: string }): Promise<HulyProjectSummary | null> =>
-      ipcRenderer.invoke('huly:getProject', args),
-    createProject: (
-      args: HulyProjectCreateArgs & { workspace?: string }
-    ): Promise<HulyProjectSummary | null> => ipcRenderer.invoke('huly:createProject', args),
-    listTeams: (args?: { workspace?: string }): Promise<HulyTeamSummary[]> =>
-      ipcRenderer.invoke('huly:listTeams', args ?? {}),
-    getTeamMembers: (args: {
-      teamId: string
-      workspace?: string
-    }): Promise<HulyTeamMember[]> => ipcRenderer.invoke('huly:getTeamMembers', args),
     getTeamStates: (args: {
       teamId: string
       workspace?: string
-    }): Promise<HulyIssueState[]> => ipcRenderer.invoke('huly:getTeamStates', args),
-    getTeamLabels: (args: {
-      teamId: string
-      workspace?: string
-    }): Promise<HulyLabel[]> => ipcRenderer.invoke('huly:getTeamLabels', args)
+    }): Promise<HulyIssueState[]> => ipcRenderer.invoke('huly:getTeamStates', args)
   },
 
   starNag: {

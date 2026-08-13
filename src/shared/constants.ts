@@ -81,6 +81,12 @@ export const BROWSER_FAMILY_LABELS: Record<string, string> = {
   manual: 'File'
 }
 
+// Why: build-time gate so Huly can be disabled without shipping a new build.
+// Set to false in builds that should hide Huly entirely (the persisted
+// `visibleTaskProvidersDefaultedForHuly` flag is user-controlled and cannot
+// be flipped fleet-wide, so the migration consults this constant instead).
+export const HULY_ROLLOUT_ENABLED = true
+
 // Why: only the initial value shown in Settings; buildFontFamily() adds the real cross-platform fallback chain.
 function defaultTerminalFontFamily(): string {
   const platform = typeof process !== 'undefined' ? process.platform : ''

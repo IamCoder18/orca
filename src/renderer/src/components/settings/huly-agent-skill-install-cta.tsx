@@ -50,9 +50,21 @@ export function HulyAgentSkillInstallCta({ settings }: Props): React.JSX.Element
   const copyCommand = async (): Promise<void> => {
     try {
       await window.api.ui.writeClipboardText(command)
-      toast.success('Copied command.')
+      toast.success(
+        translate(
+          'auto.components.settings.huly.agent.skill.install.cta.copiedCommand',
+          'Copied command.'
+        )
+      )
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to copy command.')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : translate(
+              'auto.components.settings.huly.agent.skill.install.cta.copyFailed',
+              'Failed to copy command.'
+            )
+      )
     }
   }
 
@@ -60,14 +72,33 @@ export function HulyAgentSkillInstallCta({ settings }: Props): React.JSX.Element
     <div className={subordinateRowClass}>
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-xs font-medium text-foreground">
-          Agent skill: <span className="font-mono text-[11px]">{HULY_CLI_SKILL_NAME}</span>
+          {translate(
+            'auto.components.settings.huly.agent.skill.install.cta.skillLabel',
+            'Agent skill:'
+          )}{' '}
+          <span className="font-mono text-[11px]">{HULY_CLI_SKILL_NAME}</span>
         </p>
         {skill.loading ? (
-          <IntegrationStatusPill tone="neutral">Checking...</IntegrationStatusPill>
+          <IntegrationStatusPill tone="neutral">
+            {translate(
+              'auto.components.settings.huly.agent.skill.install.cta.checking',
+              'Checking...'
+            )}
+          </IntegrationStatusPill>
         ) : skill.installed ? (
-          <IntegrationStatusPill tone="connected">Installed</IntegrationStatusPill>
+          <IntegrationStatusPill tone="connected">
+            {translate(
+              'auto.components.settings.huly.agent.skill.install.cta.installed',
+              'Installed'
+            )}
+          </IntegrationStatusPill>
         ) : (
-          <IntegrationStatusPill tone="attention">Not installed</IntegrationStatusPill>
+          <IntegrationStatusPill tone="attention">
+            {translate(
+              'auto.components.settings.huly.agent.skill.install.cta.notInstalled',
+              'Not installed'
+            )}
+          </IntegrationStatusPill>
         )}
         <Button
           type="button"
@@ -86,8 +117,14 @@ export function HulyAgentSkillInstallCta({ settings }: Props): React.JSX.Element
         <>
           <p className="text-xs text-muted-foreground">
             {skill.installed
-              ? 'Agent skill installed. To update it, run:'
-              : 'Let agents read and edit Huly tasks. Full guided setup is under Settings → Task Sources.'}
+              ? translate(
+                  'auto.components.settings.huly.agent.skill.install.cta.installedDescription',
+                  'Agent skill installed. To update it, run:'
+                )
+              : translate(
+                  'auto.components.settings.huly.agent.skill.install.cta.description',
+                  'Let agents read and edit Huly tasks. Full guided setup is under Settings → Task Sources.'
+                )}
           </p>
           <div className={commandRowClass}>
             <code className="scrollbar-sleek min-w-0 flex-1 overflow-x-auto whitespace-nowrap">
@@ -100,14 +137,20 @@ export function HulyAgentSkillInstallCta({ settings }: Props): React.JSX.Element
                   variant="ghost"
                   size="icon-xs"
                   className="shrink-0"
-                  aria-label="Copy command"
+                  aria-label={translate(
+                    'auto.components.settings.huly.agent.skill.install.cta.copyCommand',
+                    'Copy command'
+                  )}
                   onClick={() => void copyCommand()}
                 >
                   <Copy className="size-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={4}>
-                Copy command
+                {translate(
+                  'auto.components.settings.huly.agent.skill.install.cta.copyCommand',
+                  'Copy command'
+                )}
               </TooltipContent>
             </Tooltip>
           </div>

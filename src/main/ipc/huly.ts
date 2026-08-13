@@ -3,26 +3,20 @@ import type {
   HulyCommentCreateArgs,
   HulyIssueCreateArgs,
   HulyIssueUpdate,
-  HulyListFilter,
-  HulyProjectCreateArgs
+  HulyListFilter
 } from '../../shared/huly'
 import {
   addComment,
   createIssue,
-  createProject,
   disableHuly,
   enableHuly,
   getHulyPreflight,
   getHulyStatus,
   getIssue,
-  getProject,
-  getTeamLabels,
-  getTeamMembers,
   getTeamStates,
   listComments,
   listIssues,
   listProjects,
-  listTeams,
   resetHulyPreflightCache,
   updateIssue
 } from '../huly'
@@ -53,14 +47,28 @@ export function registerHulyHandlers(): void {
 
   ipcMain.handle(
     'huly:listIssues',
-    async (_event, args: { filter?: HulyListFilter; limit?: number; workspace?: string; search?: string; projectId?: string; teamId?: string } = {}) => {
+    async (
+      _event,
+      args: {
+        filter?: HulyListFilter
+        limit?: number
+        workspace?: string
+        search?: string
+        projectId?: string
+        teamId?: string
+        viewerEmail?: string
+        viewerUuid?: string
+      } = {}
+    ) => {
       return listIssues({
         filter: normalizeFilter(args.filter),
         limit: typeof args.limit === 'number' ? args.limit : 50,
         workspace: normalizeWorkspace(args.workspace),
         search: typeof args.search === 'string' ? args.search : undefined,
         projectId: typeof args.projectId === 'string' ? args.projectId : undefined,
-        teamId: typeof args.teamId === 'string' ? args.teamId : undefined
+        teamId: typeof args.teamId === 'string' ? args.teamId : undefined,
+        viewerEmail: typeof args.viewerEmail === 'string' ? args.viewerEmail : undefined,
+        viewerUuid: typeof args.viewerUuid === 'string' ? args.viewerUuid : undefined
       })
     }
   )
@@ -113,45 +121,9 @@ export function registerHulyHandlers(): void {
   )
 
   ipcMain.handle(
-    'huly:getProject',
-    async (_event, args: { id: string; workspace?: string }) => {
-      return getProject(args.id, normalizeWorkspace(args.workspace))
-    }
-  )
-
-  ipcMain.handle(
-    'huly:createProject',
-    async (_event, args: HulyProjectCreateArgs & { workspace?: string }) => {
-      const { workspace, ...rest } = args
-      return createProject(rest, normalizeWorkspace(workspace))
-    }
-  )
-
-  ipcMain.handle(
-    'huly:listTeams',
-    async (_event, args?: { workspace?: string }) => {
-      return listTeams(normalizeWorkspace(args?.workspace))
-    }
-  )
-
-  ipcMain.handle(
-    'huly:getTeamMembers',
-    async (_event, args: { teamId: string; workspace?: string }) => {
-      return getTeamMembers(args.teamId, normalizeWorkspace(args.workspace))
-    }
-  )
-
-  ipcMain.handle(
     'huly:getTeamStates',
     async (_event, args: { teamId: string; workspace?: string }) => {
       return getTeamStates(args.teamId, normalizeWorkspace(args.workspace))
-    }
-  )
-
-  ipcMain.handle(
-    'huly:getTeamLabels',
-    async (_event, args: { teamId: string; workspace?: string }) => {
-      return getTeamLabels(args.teamId, normalizeWorkspace(args.workspace))
     }
   )
 }

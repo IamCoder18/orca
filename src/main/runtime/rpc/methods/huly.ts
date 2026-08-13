@@ -61,18 +61,6 @@ const CreateIssue = z.object({
   workspace: OptionalString
 })
 
-const ProjectCreate = z.object({
-  name: requiredString('Project name is required'),
-  description: OptionalString,
-  workspaceName: OptionalString,
-  workspace: OptionalString
-})
-
-const ProjectId = z.object({
-  id: requiredString('Project ID is required'),
-  workspace: OptionalString
-})
-
 const TeamId = z.object({
   teamId: requiredString('Team ID is required'),
   workspace: OptionalString
@@ -163,37 +151,8 @@ export const HULY_METHODS: RpcAnyMethod[] = [
     handler: async (params, { runtime }) => runtime.hulyListProjects(params?.workspace)
   }),
   defineMethod({
-    name: 'huly.getProject',
-    params: ProjectId,
-    handler: async (params, { runtime }) => runtime.hulyGetProject(params.id, params.workspace)
-  }),
-  defineMethod({
-    name: 'huly.createProject',
-    params: ProjectCreate,
-    handler: async (params, { runtime }) =>
-      runtime.hulyCreateProject(
-        { name: params.name, description: params.description, workspaceName: params.workspaceName },
-        params.workspace
-      )
-  }),
-  defineMethod({
-    name: 'huly.listTeams',
-    params: WorkspaceSelection,
-    handler: async (params, { runtime }) => runtime.hulyListTeams(params?.workspace)
-  }),
-  defineMethod({
-    name: 'huly.getTeamMembers',
-    params: TeamId,
-    handler: async (params, { runtime }) => runtime.hulyGetTeamMembers(params.teamId, params.workspace)
-  }),
-  defineMethod({
     name: 'huly.getTeamStates',
     params: TeamId,
     handler: async (params, { runtime }) => runtime.hulyGetTeamStates(params.teamId, params.workspace)
-  }),
-  defineMethod({
-    name: 'huly.getTeamLabels',
-    params: TeamId,
-    handler: async (params, { runtime }) => runtime.hulyGetTeamLabels(params.teamId, params.workspace)
   })
 ]

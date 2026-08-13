@@ -8,13 +8,9 @@ import type {
   HulyIssueCreateArgs,
   HulyIssueState,
   HulyIssueUpdate,
-  HulyLabel,
   HulyListFilter,
   HulyPreflight,
-  HulyProjectCreateArgs,
   HulyProjectSummary,
-  HulyTeamMember,
-  HulyTeamSummary,
   HulyViewer,
   HulyWorkspace
 } from '../../shared/huly'
@@ -53,19 +49,23 @@ async function writeEnabled(userDataPath: string, enabled: boolean): Promise<voi
   await fs.writeFile(file, JSON.stringify({ enabled }, null, 2), 'utf8')
 }
 
-export type HulyStateEnv = { userDataPath: string }
+type HulyStateEnv = { userDataPath: string }
 
 // ── status ──────────────────────────────────────────────────────────────
 
 let preflightCache: { status: HulyPreflight; at: number } | null = null
-const PREFLIGHT_TTL_MS = 30_000
+let viewerCache: { viewer: HulyViewer | null; at: number } | null = null
+let workspacesCache: { workspaces: HulyWorkspace[]; at: number } | null = null
+const STATUS_TTL_MS = 30_000
 
 export function resetHulyPreflightCache(): void {
   preflightCache = null
+  viewerCache = null
+  workspacesCache = null
 }
 
 export async function getHulyPreflight(_env: HulyStateEnv): Promise<HulyPreflight> {
-  if (preflightCache && Date.now() - preflightCache.at < PREFLIGHT_TTL_MS) {
+  if (preflightCache && Date.now() - preflightCache.at < STATUS_TTL_MS) {
     return preflightCache.status
   }
   const status = await preflightHulyCli()
@@ -77,8 +77,8 @@ export async function getHulyStatus(env: HulyStateEnv): Promise<HulyConnectionSt
   const [enabled, preflight, workspaces, viewer] = await Promise.all([
     readEnabled(env.userDataPath),
     getHulyPreflight(env),
-    safeListWorkspaces(),
-    safeFetchViewer()
+    cachedListWorkspaces(),
+    cachedFetchViewer()
   ])
   const available = preflight.installed && preflight.authenticated
   return {
@@ -88,6 +88,24 @@ export async function getHulyStatus(env: HulyStateEnv): Promise<HulyConnectionSt
     workspaces,
     cliVersion: preflight.version
   }
+}
+
+async function cachedListWorkspaces(): Promise<HulyWorkspace[]> {
+  if (workspacesCache && Date.now() - workspacesCache.at < STATUS_TTL_MS) {
+    return workspacesCache.workspaces
+  }
+  const workspaces = await safeListWorkspaces()
+  workspacesCache = { workspaces, at: Date.now() }
+  return workspaces
+}
+
+async function cachedFetchViewer(): Promise<HulyViewer | null> {
+  if (viewerCache && Date.now() - viewerCache.at < STATUS_TTL_MS) {
+    return viewerCache.viewer
+  }
+  const viewer = await safeFetchViewer()
+  viewerCache = { viewer, at: Date.now() }
+  return viewer
 }
 
 export async function enableHuly(env: HulyStateEnv): Promise<HulyConnectionStatus> {
@@ -100,6 +118,7 @@ export async function enableHuly(env: HulyStateEnv): Promise<HulyConnectionStatu
   if (!preflight.authenticated) {
     throw new Error('Run `huly auth login` in your terminal, then try again.')
   }
+  resetHulyPreflightCache()
   await writeEnabled(env.userDataPath, true)
   return await getHulyStatus(env)
 }
@@ -163,6 +182,7 @@ export async function listProjects(workspace?: string): Promise<HulyProjectSumma
     description?: string
     url?: string
     workspace?: { name?: string; url?: string }
+    team?: { id?: string; name?: string; key?: string }
   }
   const args = workspace ? ['project', 'list', '--workspace', workspace] : ['project', 'list']
   const raw = await runHulyCli<Raw[]>(args)
@@ -176,44 +196,11 @@ export async function listProjects(workspace?: string): Promise<HulyProjectSumma
       description: entry.description,
       workspaceName: entry.workspace?.name ?? workspace,
       workspaceUrl: entry.workspace?.url,
-      url: entry.url
+      url: entry.url,
+      ...(entry.team?.id && entry.team?.name
+        ? { team: { id: entry.team.id, name: entry.team.name, key: entry.team.key } }
+        : {})
     }))
-}
-
-export async function getProject(id: string, workspace?: string): Promise<HulyProjectSummary | null> {
-  type Raw = {
-    id?: string
-    name?: string
-    description?: string
-    url?: string
-    workspace?: { name?: string; url?: string }
-  }
-  try {
-    const raw = await runHulyCli<Raw>(['project', 'get', id], { workspace })
-    if (!raw.id || !raw.name) return null
-    return {
-      id: raw.id,
-      name: raw.name,
-      description: raw.description,
-      workspaceName: raw.workspace?.name,
-      workspaceUrl: raw.workspace?.url,
-      url: raw.url
-    }
-  } catch (error) {
-    if (error instanceof HulyCliMissingError) return null
-    throw error
-  }
-}
-
-export async function createProject(args: HulyProjectCreateArgs, workspace?: string): Promise<HulyProjectSummary | null> {
-  type Raw = { id?: string; name?: string; url?: string; description?: string }
-  const cliArgs = ['project', 'create', '--name', args.name]
-  if (args.description) cliArgs.push('--description', args.description)
-  if (workspace) cliArgs.push('--workspace', workspace)
-  else if (args.workspaceName) cliArgs.push('--workspace', args.workspaceName)
-  const raw = await runHulyCli<Raw>(cliArgs, { workspace })
-  if (!raw.id || !raw.name) return null
-  return { id: raw.id, name: raw.name, description: raw.description, url: raw.url }
 }
 
 export type ListHulyIssuesArgs = {
@@ -229,24 +216,45 @@ export type ListHulyIssuesArgs = {
   viewerUuid?: string
 }
 
+export class HulyViewerIdentityRequiredError extends Error {
+  constructor(filter: HulyListFilter) {
+    super(
+      `Cannot resolve "${filter}" filter: Huly viewer identity is not available yet. Try re-checking the connection.`
+    )
+    this.name = 'HulyViewerIdentityRequiredError'
+  }
+}
+
 export async function listIssues(args: ListHulyIssuesArgs = {}): Promise<HulyIssue[]> {
+  // Why: filters that need viewer identity must surface a clear error when
+  // the viewer email/UUID is not yet known — otherwise the CLI returns the
+  // full unfiltered list under an "Assigned to me" / "Created by me" label.
+  if (args.filter === 'assigned' && !args.viewerEmail) {
+    throw new HulyViewerIdentityRequiredError('assigned')
+  }
+  if (args.filter === 'created' && !args.viewerUuid) {
+    throw new HulyViewerIdentityRequiredError('created')
+  }
   const cliArgs: string[] = ['issue', 'list']
   if (args.projectId) cliArgs.push('--project', args.projectId)
   if (args.teamId) cliArgs.push('--team', args.teamId)
   if (args.search) cliArgs.push('--description-search', args.search)
   // Why: `--mine` is not a flag in the huly CLI. Use `--assignee <email>` so
-  // the CLI resolves email → user UUID server-side; we always pass the
-  // viewer email (resolved from `whoami`) for the assigned filter.
+  // the CLI resolves email → user UUID server-side.
   if (args.filter === 'assigned' && args.viewerEmail) {
     cliArgs.push('--assignee', args.viewerEmail)
+  }
+  // Why: the huly CLI has no `--status open` flag; pass `--is-open` to scope
+  // the "All open" preset to open tickets instead of every status.
+  if (args.filter === 'all') {
+    cliArgs.push('--is-open')
   }
   if (args.limit) cliArgs.push('--limit', String(args.limit))
   type Raw = Record<string, unknown>
   const raw = await runHulyCli<Raw[]>(cliArgs, { workspace: args.workspace })
   const issues = raw.map(toIssue).filter((issue): issue is HulyIssue => issue !== null)
   // Why: the huly CLI has no --created-by flag. Filter "created by me"
-  // client-side once we know the viewer's UUID; cache the UUID after the
-  // first assignee lookup so subsequent calls skip the email→UUID step.
+  // client-side once we know the viewer's UUID.
   if (args.filter === 'created' && args.viewerUuid) {
     return issues.filter((issue) => issue.createdBy === args.viewerUuid)
   }
@@ -332,28 +340,6 @@ export async function addComment(
   return { id: raw.id, body: raw.body, createdAt: raw.createdAt ?? new Date().toISOString(), user: raw.user }
 }
 
-export async function listTeams(workspace?: string): Promise<HulyTeamSummary[]> {
-  type Raw = { id?: string; name?: string; key?: string }
-  const raw = await runHulyCli<Raw[]>('team list'.split(' '), { workspace })
-  return raw
-    .filter((entry): entry is Raw & { id: string; name: string } =>
-      typeof entry.id === 'string' && typeof entry.name === 'string'
-    )
-    .map((entry) => ({ id: entry.id, name: entry.name, key: entry.key }))
-}
-
-export async function getTeamMembers(teamId: string, workspace?: string): Promise<HulyTeamMember[]> {
-  type Raw = { id?: string; displayName?: string; name?: string; email?: string | null }
-  const raw = await runHulyCli<Raw[]>(['team', 'members', '--team', teamId], { workspace })
-  return raw
-    .filter((entry): entry is Raw & { id: string } => typeof entry.id === 'string')
-    .map((entry) => ({
-      id: entry.id,
-      displayName: entry.displayName ?? entry.name ?? entry.id,
-      email: entry.email ?? null
-    }))
-}
-
 export async function getTeamStates(teamId: string, workspace?: string): Promise<HulyIssueState[]> {
   type Raw = { id?: string; name?: string; type?: string; color?: string }
   const raw = await runHulyCli<Raw[]>(['team', 'states', '--team', teamId], { workspace })
@@ -362,16 +348,6 @@ export async function getTeamStates(teamId: string, workspace?: string): Promise
       typeof entry.id === 'string' && typeof entry.name === 'string'
     )
     .map((entry) => ({ id: entry.id, name: entry.name, type: entry.type ?? '', color: entry.color }))
-}
-
-export async function getTeamLabels(teamId: string, workspace?: string): Promise<HulyLabel[]> {
-  type Raw = { id?: string; name?: string; color?: string }
-  const raw = await runHulyCli<Raw[]>(['team', 'labels', '--team', teamId], { workspace })
-  return raw
-    .filter((entry): entry is Raw & { id: string; name: string } =>
-      typeof entry.id === 'string' && typeof entry.name === 'string'
-    )
-    .map((entry) => ({ id: entry.id, name: entry.name, color: entry.color }))
 }
 
 // ── normalization ───────────────────────────────────────────────────────

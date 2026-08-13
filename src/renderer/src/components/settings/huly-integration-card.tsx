@@ -11,6 +11,7 @@ import { getProviderAccountScope } from './provider-account-scope'
 import { getProviderRuntimeContextKey, hasRemoteProviderRuntime } from '@/lib/provider-runtime-context'
 import { useAppStore } from '@/store'
 import { HULY_CLI_INSTALL_COMMAND } from '@/lib/agent-feature-install-commands'
+import { translate } from '@/i18n/i18n'
 
 export function HulyIntegrationCard(): React.JSX.Element {
   const status = useAppStore((s) => s.hulyStatus)
@@ -39,23 +40,40 @@ export function HulyIntegrationCard(): React.JSX.Element {
     void checkConnection(true)
   }, [contextKey, refreshPreflight, checkConnection])
 
-  const statusTone = connected ? 'connected' : cliReady ? 'attention' : 'neutral'
-  const statusLabel = connected ? 'Connected' : cliReady ? 'Ready' : 'Not connected'
+  const statusTone: 'connected' | 'attention' = connected ? 'connected' : 'attention'
+  const statusLabel = connected
+    ? translate('auto.components.settings.huly.integration.card.statusConnected', 'Connected')
+    : cliReady
+      ? translate('auto.components.settings.huly.integration.card.statusReady', 'Ready')
+      : translate(
+          'auto.components.settings.huly.integration.card.statusNotConnected',
+          'Not connected'
+        )
 
   const description = connected
-    ? viewer?.email
-      ? `Connected to Huly as ${viewer.email}`
-      : 'Connected to Huly via the huly CLI.'
+    ? translate(
+        'auto.components.settings.huly.integration.card.descriptionConnected',
+        'Connected to Huly via the huly CLI.'
+      )
     : checking
-      ? 'Checking Huly CLI access before showing setup actions.'
+      ? translate(
+          'auto.components.settings.huly.integration.card.descriptionChecking',
+          'Checking Huly CLI access before showing setup actions.'
+        )
       : cliReady
-        ? 'huly CLI detected. Click Connect to enable.'
-        : 'Browse, create, and start work from Huly issues.'
+        ? translate(
+            'auto.components.settings.huly.integration.card.descriptionReady',
+            'huly CLI detected. Click Connect to enable.'
+          )
+        : translate(
+            'auto.components.settings.huly.integration.card.descriptionDefault',
+            'Browse, create, and start work from Huly issues.'
+          )
 
   const action = connected ? (
     <Button variant="outline" size="sm" onClick={() => void disableHuly()}>
       <Unlink className="mr-1.5 size-3.5" />
-      Disconnect
+      {translate('auto.components.settings.huly.integration.card.disconnect', 'Disconnect')}
     </Button>
   ) : cliReady ? (
     <Button
@@ -66,7 +84,10 @@ export function HulyIntegrationCard(): React.JSX.Element {
         })
       }}
     >
-      Connect via huly CLI
+      {translate(
+        'auto.components.settings.huly.integration.card.connect',
+        'Connect via huly CLI'
+      )}
     </Button>
   ) : null
 
@@ -83,7 +104,10 @@ export function HulyIntegrationCard(): React.JSX.Element {
     >
       <IntegrationCardDetails>
         <ProviderHostScopeControl
-          labelPrefix="Account scope"
+          labelPrefix={translate(
+            'auto.components.settings.huly.integration.card.scope',
+            'Account scope'
+          )}
           scope={accountScope}
           showOpenServersAction={false}
           className="text-xs"
@@ -94,7 +118,7 @@ export function HulyIntegrationCard(): React.JSX.Element {
         {connected ? (
           <Button variant="ghost" size="sm" onClick={() => void checkConnection(true)}>
             <RefreshCw className="mr-1.5 size-3.5" />
-            Re-check
+            {translate('auto.components.settings.huly.integration.card.recheck', 'Re-check')}
           </Button>
         ) : !checking ? (
           <PreflightStatus
@@ -106,16 +130,25 @@ export function HulyIntegrationCard(): React.JSX.Element {
         ) : null}
 
         <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-          Auth and URL are managed by the huly CLI. Change them with `huly auth login` or
-          `huly workspace switch`.{' '}
+          {translate(
+            'auto.components.settings.huly.integration.card.cliAuthManagedByCli',
+            'Auth and URL are managed by the huly CLI. Change them with `huly auth login` or `huly workspace switch`.'
+          )}{' '}
           <a
             href="https://github.com/IamCoder18/huly-cli"
             target="_blank"
             rel="noreferrer"
+            aria-label={translate(
+              'auto.components.settings.huly.integration.card.copyLinkAria',
+              'Open huly CLI repository'
+            )}
             className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
           >
             <ExternalLink className="size-3" />
-            IamCoder18/huly-cli
+            {translate(
+              'auto.components.settings.huly.integration.card.cliRepoLink',
+              'IamCoder18/huly-cli'
+            )}
           </a>
         </p>
 
@@ -163,11 +196,15 @@ function PreflightStatus({
       <div className="space-y-2">
         <p className="inline-flex items-center gap-1.5 text-xs text-status-warning">
           <AlertCircle className="size-3.5" />
-          huly CLI not detected on {installHost}. Run: {installCommand}
+          {translate(
+            'auto.components.settings.huly.integration.card.cliNotDetected',
+            'huly CLI not detected on {{value0}}. Run: {{value1}}',
+            { value0: installHost, value1: installCommand }
+          )}
         </p>
         <Button variant="ghost" size="sm" onClick={onRecheck}>
           <RefreshCw className="mr-1.5 size-3.5" />
-          Re-check
+          {translate('auto.components.settings.huly.integration.card.recheck', 'Re-check')}
         </Button>
       </div>
     )
@@ -186,15 +223,28 @@ function PreflightStatus({
         ) : (
           <AlertCircle className="size-3.5" />
         )}
-        huly CLI installed
-        {preflight.version ? ` (${preflight.version})` : ''}
+        {translate(
+          'auto.components.settings.huly.integration.card.cliInstalled',
+          'huly CLI installed'
+        )}
+        {preflight.version
+          ? translate(
+              'auto.components.settings.huly.integration.card.cliInstalledWithVersion',
+              ' ({{value0}})',
+              { value0: preflight.version }
+            )
+          : ''}
         {preflight.authenticated
           ? ''
-          : ` — run \`huly auth login\` on ${installHost}.`}
+          : translate(
+              'auto.components.settings.huly.integration.card.cliAuthRequired',
+              ' — run `huly auth login` on {{value0}}.',
+              { value0: installHost }
+            )}
       </p>
       <Button variant="ghost" size="sm" onClick={onRecheck}>
         <RefreshCw className="mr-1.5 size-3.5" />
-        Re-check
+        {translate('auto.components.settings.huly.integration.card.recheck', 'Re-check')}
       </Button>
     </div>
   )

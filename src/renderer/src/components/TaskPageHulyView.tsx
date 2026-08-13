@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { ExternalLink, LoaderCircle, Plus, Search } from 'lucide-react'
+import { ArrowDownUp, ExternalLink, LoaderCircle, Plus, Search } from 'lucide-react'
 import { HulyIcon } from '@/components/icons/HulyIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,10 @@ import type { HulyIssue, HulyListFilter } from '../../../shared/huly'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { HulyIssueWorkspace } from './HulyIssueWorkspace'
 import { HulyCreateIssueDialog } from './HulyCreateIssueDialog'
-import { PRIORITY_LABEL, stateToneClasses } from '@/lib/huly-presentation'
+import { stateToneClasses } from '@/lib/huly-presentation'
+import { HulyPriorityIcon } from '@/lib/huly-priority-icon'
+import { formatUiRelativeTimeFromDate } from '@/i18n/relative-time-format'
+import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -22,10 +25,27 @@ type Props = {
   onUseIssue: (issue: HulyIssue) => void
 }
 
+type SortOrder = 'updated' | 'priority' | 'identifier'
+
 const FILTERS: { id: HulyListFilter; label: string }[] = [
-  { id: 'assigned', label: 'Assigned to me' },
-  { id: 'created', label: 'Created by me' },
-  { id: 'all', label: 'All open' }
+  {
+    id: 'assigned',
+    label: translate('auto.components.TaskPage.huly.filter.assigned', 'Assigned to me')
+  },
+  {
+    id: 'created',
+    label: translate('auto.components.TaskPage.huly.filter.created', 'Created by me')
+  },
+  {
+    id: 'all',
+    label: translate('auto.components.TaskPage.huly.filter.allOpen', 'All open')
+  }
+]
+
+const SORT_OPTIONS: { id: SortOrder; label: string }[] = [
+  { id: 'updated', label: translate('auto.components.TaskPage.huly.sort.updated', 'Updated') },
+  { id: 'priority', label: translate('auto.components.TaskPage.huly.sort.priority', 'Priority') },
+  { id: 'identifier', label: translate('auto.components.TaskPage.huly.sort.identifier', 'Identifier') }
 ]
 
 const ALL_WORKSPACES = '__all__'
@@ -41,6 +61,7 @@ export function TaskPageHulyView({
 }: Props): React.JSX.Element {
   const listIssues = useAppStore((s) => s.listHulyIssues)
   const [filter, setFilter] = useState<HulyListFilter>('assigned')
+  const [sort, setSort] = useState<SortOrder>('updated')
   const [search, setSearch] = useState('')
   const [issues, setIssues] = useState<HulyIssue[]>([])
   const [loading, setLoading] = useState(false)
@@ -66,7 +87,7 @@ export function TaskPageHulyView({
     setError(null)
     void listIssues(
       { filter, limit: 50 },
-      { sourceContext, workspace: workspace ?? undefined, force: true }
+      { sourceContext, workspace: workspace ?? undefined }
     )
       .then((result) => {
         if (cancelled) return
@@ -84,16 +105,28 @@ export function TaskPageHulyView({
     }
   }, [connected, filter, listIssues, sourceContext, workspacesKey, workspace, refreshKey])
 
+  const sorted = useMemo(() => {
+    const list = [...issues]
+    if (sort === 'priority') {
+      list.sort((a, b) => (b.priority || 0) - (a.priority || 0))
+    } else if (sort === 'identifier') {
+      list.sort((a, b) => a.identifier.localeCompare(b.identifier))
+    } else {
+      list.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+    }
+    return list
+  }, [issues, sort])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return issues
-    return issues.filter(
+    if (!q) return sorted
+    return sorted.filter(
       (issue) =>
         issue.title.toLowerCase().includes(q) ||
         issue.identifier.toLowerCase().includes(q) ||
         issue.team.name.toLowerCase().includes(q)
     )
-  }, [issues, search])
+  }, [sorted, search])
 
   const selectedIssue = filtered.find((i) => i.id === selectedIssueId) ?? null
 
@@ -109,10 +142,14 @@ export function TaskPageHulyView({
     return (
       <div className="mt-4 flex flex-col items-center justify-center rounded-md border border-border/50 bg-muted/50 px-6 py-14 text-center shadow-sm">
         <HulyIcon className="mb-4 size-8 text-muted-foreground/60" />
-        <p className="text-base font-medium text-foreground">Connect Huly</p>
+        <p className="text-base font-medium text-foreground">
+          {translate('auto.components.TaskPage.huly.notConnected.title', 'Connect Huly')}
+        </p>
         <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-          Browse, create, and start work from Huly issues directly from here. Run
-          `huly auth login` on the host, then click Connect in Settings.
+          {translate(
+            'auto.components.TaskPage.huly.notConnected.body',
+            'Browse, create, and start work from Huly issues directly from here. Run `huly auth login` on the host, then click Connect in Settings.'
+          )}
         </p>
       </div>
     )
@@ -130,7 +167,9 @@ export function TaskPageHulyView({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL_WORKSPACES}>All workspaces</SelectItem>
+              <SelectItem value={ALL_WORKSPACES}>
+                {translate('auto.components.TaskPage.huly.allWorkspaces', 'All workspaces')}
+              </SelectItem>
               {workspaces.map((w) => (
                 <SelectItem key={w.id} value={w.name}>
                   {w.name}
@@ -158,23 +197,39 @@ export function TaskPageHulyView({
           ))}
         </div>
 
-        <div className="relative ml-auto w-48">
+        <Select value={sort} onValueChange={(v) => setSort(v as SortOrder)}>
+          <SelectTrigger className="ml-auto h-7 w-[140px] text-xs">
+            <ArrowDownUp className="mr-1 size-3 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((opt) => (
+              <SelectItem key={opt.id} value={opt.id}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="relative w-48">
           <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search…"
+            placeholder={translate('auto.components.TaskPage.huly.searchPlaceholder', 'Search…')}
             className="h-7 pl-7 text-xs"
           />
         </div>
 
         <Button size="xs" variant="outline" onClick={() => setCreateOpen(true)}>
           <Plus className="mr-1 size-3" />
-          New issue
+          {translate('auto.components.TaskPage.huly.newIssue', 'New issue')}
         </Button>
 
         <span className="shrink-0 text-[11px] text-muted-foreground">
-          {issues.length} shown
+          {translate('auto.components.TaskPage.huly.shownCount', '{count} shown', {
+            values: { count: issues.length }
+          })}
         </span>
       </div>
 
@@ -195,9 +250,13 @@ export function TaskPageHulyView({
 
       {!loading && !error && filtered.length === 0 ? (
         <div className="px-4 py-10 text-center">
-          <p className="text-sm font-medium text-foreground">No Huly issues</p>
+          <p className="text-sm font-medium text-foreground">
+            {translate('auto.components.TaskPage.huly.empty.title', 'No Huly issues')}
+          </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {search ? 'No issues match your search.' : 'No issues match the selected preset.'}
+            {search
+              ? translate('auto.components.TaskPage.huly.empty.search', 'No issues match your search.')
+              : translate('auto.components.TaskPage.huly.empty.preset', 'No issues match the selected preset.')}
           </p>
         </div>
       ) : null}
@@ -226,20 +285,48 @@ export function TaskPageHulyView({
                       {issue.state.name}
                     </span>
                     {issue.priority > 0 ? (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {PRIORITY_LABEL[issue.priority] ?? `Priority ${issue.priority}`}
-                      </span>
+                      <HulyPriorityIcon priority={issue.priority} />
                     ) : null}
+                    {issue.labels.slice(0, 2).map((label) => (
+                      <span
+                        key={label}
+                        className="shrink-0 truncate rounded border border-border/40 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                        title={label}
+                      >
+                        {label}
+                      </span>
+                    ))}
                   </div>
                   <p className="mt-1 truncate text-sm font-medium text-foreground">{issue.title}</p>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {issue.workspaceName && workspaces.length > 1
                       ? `${issue.workspaceName} / ${issue.team.name}`
                       : issue.team.name}
-                    {issue.assignee ? ` · ${issue.assignee.displayName}` : ''}
+                    {' · '}
+                    {issue.assignee?.displayName ?? 'Unassigned'}
+                    {' · '}
+                    {formatUiRelativeTimeFromDate(issue.updatedAt)}
                   </p>
                 </div>
-                <ExternalLink className="size-3.5 shrink-0 text-muted-foreground/50" />
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={translate('auto.components.TaskPage.huly.openInHuly', 'Open in Huly')}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    window.api.shell.openUrl(issue.url)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      window.api.shell.openUrl(issue.url)
+                    }
+                  }}
+                  className="mt-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition hover:bg-muted hover:text-foreground"
+                >
+                  <ExternalLink className="size-3.5" />
+                </span>
               </button>
             ))}
           </div>
