@@ -395,12 +395,50 @@ function toIssue(raw: RawIssue): HulyIssue | null {
   const id = asString(raw.id) ?? asString(raw._id)
   const identifier = asString(raw.identifier) ?? asString(raw.key)
   const title = asString(raw.title) ?? asString(raw.name)
-  const url = asString(raw.url) ?? asString(raw.link)
+  // Why: the CLI returns the issue list with ID-only references (state and
+  // team are string IDs, not nested objects). Build a synthetic URL so the
+  // card stays tappable; the detail workspace hydrates full names via
+  // `huly issue get`. URL falls back to huly.app when the workspace URL is
+  // unknown (the cli whoami exposes it but isn't passed here).
+  const workspaceUrl = asString(raw.workspaceUrl) ?? asString(raw.workspace_url)
+  const url =
+    asString(raw.url) ??
+    asString(raw.link) ??
+    (workspaceUrl
+      ? `https://huly.app/workspace/${workspaceUrl}/issue/${identifier ?? id}`
+      : `https://huly.app/issue/${identifier ?? id}`)
+  if (!id || !identifier || !title || !url) return null
+
   const stateRaw = raw.state as Record<string, unknown> | undefined
+  const stateString = asString(raw.state)
+  const stateId = stateRaw?.id ? asString(stateRaw.id) : stateString ?? ''
+  // Why: CLI returns status as an ID-only string ("tracker:status:InProgress")
+  // without a nested object. Split on the last colon and humanize so the row
+  // shows "InProgress" instead of the full tracker ID.
+  const stateName =
+    (stateRaw?.name ? asString(stateRaw.name) : null) ??
+    stateString?.split(':').pop()?.replace(/[-_]+/g, ' ').trim() ??
+    ''
+  const isDone = raw.isDone === true || stateRaw?.type === 'done'
+
   const teamRaw = raw.team as Record<string, unknown> | undefined
-  if (!id || !identifier || !title || !url || !stateRaw || !teamRaw) return null
+  const teamString = asString(raw.team)
+  const teamId = teamRaw?.id ? asString(teamRaw.id) : teamString ?? ''
+  function readableNameFromId(value: string | undefined): string {
+  if (!value) return ''
+  const tail = value.split(':').pop()
+  return (tail && tail !== value ? tail : value).replace(/[-_]+/g, ' ').trim()
+}
+
+const teamName: string = readableNameFromId(
+  asString(teamRaw?.name) ?? asString(teamRaw?.key) ?? teamString
+)
+
   const assigneeRaw = raw.assignee as Record<string, unknown> | undefined
+  const assigneeStringId = asString(raw.assignee)
   const projectRaw = raw.project as Record<string, unknown> | undefined
+  const projectStringId = asString(raw.project)
+
   return {
     id,
     identifier,
@@ -410,33 +448,39 @@ function toIssue(raw: RawIssue): HulyIssue | null {
     workspaceName: asString(raw.workspaceName) ?? asString(raw.workspace_name),
     workspaceUrl: asString(raw.workspaceUrl) ?? asString(raw.workspace_url),
     state: {
-      id: asString(stateRaw.id) ?? '',
-      name: asString(stateRaw.name) ?? '',
-      type: asString(stateRaw.type) ?? '',
-      color: asString(stateRaw.color)
+      id: stateId ?? '',
+      name: stateName ?? (isDone ? 'Done' : 'Open'),
+      type: (stateRaw?.type ? asString(stateRaw.type) : isDone ? 'done' : 'unstarted') ?? 'unstarted',
+      color: stateRaw?.color ? asString(stateRaw.color) : undefined
     },
     team: {
-      id: asString(teamRaw.id) ?? '',
-      name: asString(teamRaw.name) ?? '',
-      key: asString(teamRaw.key)
+      id: teamId ?? '',
+      name: teamName ?? '',
+      key: teamRaw?.key ? asString(teamRaw.key) : undefined
     },
-    project: projectRaw && asString(projectRaw.id) && asString(projectRaw.name)
-      ? {
-          id: projectRaw.id as string,
-          name: projectRaw.name as string,
-          description: asString(projectRaw.description),
-          workspaceName: asString(projectRaw.workspaceName),
-          workspaceUrl: asString(projectRaw.workspaceUrl),
-          url: asString(projectRaw.url)
-        }
-      : undefined,
-    assignee: assigneeRaw && asString(assigneeRaw.id)
-      ? {
-          id: assigneeRaw.id as string,
-          displayName: asString(assigneeRaw.displayName) ?? asString(assigneeRaw.name) ?? '',
-          email: asString(assigneeRaw.email) ?? null
-        }
-      : undefined,
+    project:
+      projectRaw && asString(projectRaw.id) && asString(projectRaw.name)
+        ? {
+            id: projectRaw.id as string,
+            name: projectRaw.name as string,
+            description: asString(projectRaw.description),
+            workspaceName: asString(projectRaw.workspaceName),
+            workspaceUrl: asString(projectRaw.workspaceUrl),
+            url: asString(projectRaw.url)
+          }
+        : projectStringId
+          ? { id: projectStringId, name: projectStringId }
+          : undefined,
+    assignee:
+      assigneeRaw && asString(assigneeRaw.id)
+        ? {
+            id: assigneeRaw.id as string,
+            displayName: asString(assigneeRaw.displayName) ?? asString(assigneeRaw.name) ?? '',
+            email: asString(assigneeRaw.email) ?? null
+          }
+        : assigneeStringId
+          ? { id: assigneeStringId, displayName: assigneeStringId }
+          : undefined,
     labels: asStringArray(raw.labels),
     priority: asNumber(raw.priority),
     dueDate: asString(raw.dueDate) ?? null,

@@ -3161,9 +3161,14 @@ export default function TaskPage(): React.JSX.Element {
       ? (jiraSites.find((site) => site.id === selectedJiraSiteId) ?? null)
       : null
   const hulyWorkspaces = hulyStatus.workspaces ?? []
-  const [selectedHulyWorkspaceName, setSelectedHulyWorkspaceName] = useState<string | null>(
-    () => hulyWorkspaces[0]?.name ?? null
-  )
+  // Why: huly status may load after the Tasks page mounts (the workspace
+  // list comes from `huly workspace list`). Default to the first workspace
+  // once it arrives; user-chosen selections still win.
+  const [userSelectedHulyWorkspace, setUserSelectedHulyWorkspace] = useState<string | null>(null)
+  const selectedHulyWorkspaceName =
+    userSelectedHulyWorkspace && hulyWorkspaces.some((w) => w.name === userSelectedHulyWorkspace)
+      ? userSelectedHulyWorkspace
+      : hulyWorkspaces[0]?.name ?? null
   const preferredVisibleTaskProviders = useMemo(
     () => normalizeVisibleTaskProviders(settings?.visibleTaskProviders),
     [settings?.visibleTaskProviders]
@@ -11054,7 +11059,7 @@ export default function TaskPage(): React.JSX.Element {
               statusReady={hulyStatusCurrent && hulyStatusChecked}
               workspaces={hulyStatus.workspaces ?? []}
               selectedWorkspace={selectedHulyWorkspaceName}
-              onSelectWorkspace={setSelectedHulyWorkspaceName}
+              onSelectWorkspace={setUserSelectedHulyWorkspace}
               onUseIssue={handleUseHulyItem}
             />
           ) : !linearStatusReady ? (
