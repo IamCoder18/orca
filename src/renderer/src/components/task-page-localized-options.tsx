@@ -1,6 +1,7 @@
 import React from 'react'
 import { Github, Gitlab, LayoutGrid, List } from 'lucide-react'
 
+import { HulyIcon } from '@/components/icons/HulyIcon'
 import { JiraIcon } from '@/components/icons/JiraIcon'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import { translate } from '@/i18n/i18n'
@@ -130,6 +131,11 @@ export const getSourceOptions = createLocalizedCatalog((): SourceOption[] => [
     id: 'jira',
     label: translate('auto.components.TaskPage.9cd11ba218', 'Jira'),
     Icon: ({ className }) => <JiraIcon className={className} />
+  },
+  {
+    id: 'huly',
+    label: translate('auto.components.TaskPage.huly', 'Huly'),
+    Icon: ({ className }) => <HulyIcon className={className} />
   }
 ])
 

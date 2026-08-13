@@ -46,9 +46,10 @@ export type WorkspaceIntentWorkItem = {
   type: 'issue' | 'pr' | 'mr'
   number: number
   title: string
-  provider?: 'github' | 'gitlab' | 'linear' | 'jira'
+  provider?: 'github' | 'gitlab' | 'linear' | 'jira' | 'huly'
   linearIdentifier?: string
   jiraIdentifier?: string
+  hulyIdentifier?: string
 }
 
 export type WorkspaceIntentName = {
@@ -251,6 +252,10 @@ export function getLinearIssueWorkspaceName(issue: { identifier: string; title: 
     dedupedTitleSlug = titleSlug.slice(key.length + 1)
   }
   return slugifyForWorkspaceName([key, dedupedTitleSlug].filter(Boolean).join('-'))
+}
+
+export function getHulyIssueWorkspaceName(issue: { identifier: string; title: string }): string {
+  return getLinearIssueWorkspaceName(issue)
 }
 
 export function resolveWorkspaceCreateName(args: {

@@ -26,7 +26,8 @@ function buildReadiness(
       skillChecking: false,
       visible: true
     },
-    jira: { connected: true, checking: false, visible: true }
+    jira: { connected: true, checking: false, visible: true },
+    huly: { connected: false, checking: false, visible: false }
   }
   for (const provider of ORDER) {
     Object.assign(base[provider], overrides[provider])
@@ -166,7 +167,8 @@ describe('task-source-setup-state', () => {
       github: { connected: false },
       gitlab: { connected: false },
       linear: { connected: false, skillInstalled: false },
-      jira: { connected: false }
+      jira: { connected: false },
+      huly: { connected: false }
     })
 
     expect(getIncompleteVisibleTaskProviders(ORDER, untouched)).toEqual([
@@ -225,7 +227,8 @@ describe('task-source-setup-state', () => {
   it('does not switch to a later incomplete provider during the previous provider recheck', () => {
     const whileChecking = buildReadiness({
       linear: { skillInstalled: false, skillChecking: true },
-      jira: { connected: false }
+      jira: { connected: false },
+      huly: { connected: false }
     })
 
     expect(getAutoExpandedTaskProvider(ORDER, whileChecking)).toBe('jira')

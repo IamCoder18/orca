@@ -51,7 +51,8 @@ describe('task providers', () => {
     expect(
       filterAvailableTaskProviders(['github', 'gitlab', 'linear'], {
         gitlabInstalled: false,
-        linearConnected: true
+        linearConnected: true,
+        hulyConnected: false
       })
     ).toEqual(['github', 'linear'])
   })
@@ -62,7 +63,8 @@ describe('task providers', () => {
         ['linear'],
         {
           gitlabInstalled: false,
-          linearConnected: true
+          linearConnected: true,
+        hulyConnected: false
         },
         'github'
       )
@@ -75,7 +77,8 @@ describe('task providers', () => {
         ['linear'],
         {
           gitlabInstalled: false,
-          linearConnected: true
+          linearConnected: true,
+        hulyConnected: false
         },
         'linear'
       )
@@ -88,7 +91,8 @@ describe('task providers', () => {
         ['linear'],
         {
           gitlabInstalled: false,
-          linearConnected: true
+          linearConnected: true,
+        hulyConnected: false
         },
         'gitlab'
       )
@@ -101,7 +105,8 @@ describe('task providers', () => {
         ['gitlab'],
         {
           gitlabInstalled: false,
-          linearConnected: true
+          linearConnected: true,
+        hulyConnected: false
         },
         'bitbucket'
       )
@@ -112,7 +117,8 @@ describe('task providers', () => {
     expect(
       filterAvailableTaskProviders(['gitlab', 'linear'], {
         gitlabInstalled: false,
-        linearConnected: false
+        linearConnected: false,
+        hulyConnected: false
       })
     ).toEqual(['github'])
   })

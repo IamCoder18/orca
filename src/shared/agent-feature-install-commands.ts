@@ -132,3 +132,13 @@ export const ORCA_LINEAR_SKILL_UPDATE_COMMAND =
 
 export const LINEAR_TICKETS_SKILL_UPDATE_COMMAND =
   buildAgentFeatureSkillUpdateCommand(LINEAR_TICKETS_SKILL_NAME)
+
+// Why: Huly uses the community `IamCoder18/huly-cli` skill; the CLI install
+// command is `npm i -g @iamcoder18/huly-cli` — see HulyIntegrationCard.
+export const HULY_CLI_SKILL_NAME = 'huly-cli'
+export const HULY_AGENT_SKILL_NAMES = [HULY_CLI_SKILL_NAME] as const
+export const HULY_AGENT_SKILL_INSTALL_COMMAND = `npx skills add IamCoder18/huly-cli --skill ${HULY_CLI_SKILL_NAME} --global -y`
+export const HULY_AGENT_SKILL_UPDATE_COMMAND = buildAgentFeatureSkillUpdateCommand(
+  HULY_CLI_SKILL_NAME
+)
+export const HULY_CLI_INSTALL_COMMAND = 'npm i -g @iamcoder18/huly-cli'

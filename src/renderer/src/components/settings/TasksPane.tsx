@@ -6,6 +6,7 @@ import {
   normalizeVisibleTaskProviders,
   resolveVisibleTaskProvider
 } from '../../../../shared/task-providers'
+import { HulyIcon } from '@/components/icons/HulyIcon'
 import { JiraIcon } from '@/components/icons/JiraIcon'
 import { LinearIcon } from '@/components/icons/LinearIcon'
 import { Button } from '@/components/ui/button'
@@ -88,6 +89,18 @@ const PROVIDER_META: Record<
       )
     },
     Icon: ({ className }) => <JiraIcon className={className} />
+  },
+  huly: {
+    get label() {
+      return translate('auto.components.settings.TasksPane.hulyLabel', 'Huly')
+    },
+    get description() {
+      return translate(
+        'auto.components.settings.TasksPane.hulyDescription',
+        'Connect the huly CLI and show it in Tasks.'
+      )
+    },
+    Icon: ({ className }) => <HulyIcon className={className} />
   }
 }
 

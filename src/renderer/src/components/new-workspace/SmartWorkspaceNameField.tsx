@@ -262,6 +262,7 @@ export default function SmartWorkspaceNameField({
     getCachedWorkItems,
     linearStatus,
     linearStatusChecked,
+    hulyStatus,
     listLinearIssues,
     preflightStatus,
     preflightStatusChecked,
@@ -280,6 +281,7 @@ export default function SmartWorkspaceNameField({
       getCachedWorkItems: s.getCachedWorkItems,
       linearStatus: s.linearStatus,
       linearStatusChecked: s.linearStatusChecked,
+      hulyStatus: s.hulyStatus,
       listLinearIssues: s.listLinearIssues,
       preflightStatus: s.preflightStatus,
       preflightStatusChecked: s.preflightStatusChecked,
@@ -428,7 +430,8 @@ export default function SmartWorkspaceNameField({
     () =>
       filterAvailableTaskProviders(['github', 'gitlab', 'linear'], {
         gitlabInstalled: gitlabSourceAvailable,
-        linearConnected: linearStatus.connected === true
+        linearConnected: linearStatus.connected === true,
+        hulyConnected: hulyStatus?.enabled === true && hulyStatus?.available === true
       }),
     [gitlabSourceAvailable, linearStatus.connected]
   )

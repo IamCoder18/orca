@@ -217,6 +217,7 @@ import {
 import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
 import { getTaskPresetQuery } from '../../../shared/task-preset-query'
 import { buildLinearIssueLinkedWorkItem } from '@/lib/linear-linked-work-item'
+import { buildHulyIssueLinkedWorkItem } from '@/lib/huly-linked-work-item'
 import {
   readLinearBoardIssueDragData,
   writeLinearBoardIssueDragData
@@ -229,7 +230,7 @@ import {
   normalizeTaskSourceContext,
   type TaskSourceContext
 } from '../../../shared/task-source-context'
-import { getLinearIssueWorkspaceName } from '../../../shared/workspace-name'
+import { getLinearIssueWorkspaceName, getHulyIssueWorkspaceName } from '../../../shared/workspace-name'
 import {
   buildTaskPageRepoSourceState,
   deriveTaskPageGitHubWorkItemsFetchOptions,
@@ -377,6 +378,7 @@ import type {
   TaskProvider,
   TaskViewPresetId
 } from '../../../shared/types'
+import type { HulyIssue } from '../../../shared/huly'
 import type { PreflightStatus } from '../../../preload/api-types'
 import type { GitLabProjectRef } from '../../../shared/gitlab-types'
 import {
@@ -417,6 +419,7 @@ import {
 } from './jira-issue-sorter'
 import { TaskPageJiraSortControls } from './task-page-jira-sort-controls'
 import { bindTaskPageJiraItemSourceContext } from './task-page-jira-item-source-context'
+import { TaskPageHulyView } from './TaskPageHulyView'
 import {
   normalizeVisibleTaskProviders,
   restoreAvailableDefaultTaskProvider,
@@ -3046,16 +3049,22 @@ export default function TaskPage(): React.JSX.Element {
   const searchJiraIssues = useAppStore((s) => s.searchJiraIssues)
   const listJiraIssues = useAppStore((s) => s.listJiraIssues)
   const checkJiraConnection = useAppStore((s) => s.checkJiraConnection)
+  const hulyStatusRaw = useAppStore((s) => s.hulyStatus)
+  const hulyStatus = hulyStatusRaw ?? { enabled: false, available: false, viewer: null, workspaces: [] }
+  const hulyStatusChecked = useAppStore((s) => s.hulyStatusChecked)
+  const hulyStatusContextKey = useAppStore((s) => s.hulyStatusContextKey)
   const providerRuntimeContextKey = getProviderRuntimeContextKey(settings)
   const providerRuntimeContextKeyRef = useRef(providerRuntimeContextKey)
   providerRuntimeContextKeyRef.current = providerRuntimeContextKey
   const linearStatusCurrent = linearStatusContextKey === providerRuntimeContextKey
   const jiraStatusCurrent = jiraStatusContextKey === providerRuntimeContextKey
+  const hulyStatusCurrent = hulyStatusContextKey === providerRuntimeContextKey
   const preflightStatusCurrent = preflightStatusContextKey === expectedPreflightContextKey
   const linearStatusReady = linearStatusCurrent && linearStatusChecked
   const jiraStatusReady = jiraStatusCurrent && jiraStatusChecked
   const linearConnected = linearStatusCurrent && linearStatus.connected
   const jiraConnected = jiraStatusCurrent && jiraStatus.connected
+  const hulyConnected = hulyStatusCurrent && hulyStatus?.enabled === true && hulyStatus?.available === true
   const submitShortcutLabel = getScreenSubmitShortcutLabel()
   const eligibleRepos = useMemo(() => getTaskEligibleRepos(repos), [repos])
 
@@ -3151,6 +3160,10 @@ export default function TaskPage(): React.JSX.Element {
     selectedJiraSiteId && selectedJiraSiteId !== 'all'
       ? (jiraSites.find((site) => site.id === selectedJiraSiteId) ?? null)
       : null
+  const hulyWorkspaces = hulyStatus.workspaces ?? []
+  const [selectedHulyWorkspaceName, setSelectedHulyWorkspaceName] = useState<string | null>(
+    () => hulyWorkspaces[0]?.name ?? null
+  )
   const preferredVisibleTaskProviders = useMemo(
     () => normalizeVisibleTaskProviders(settings?.visibleTaskProviders),
     [settings?.visibleTaskProviders]
@@ -3162,7 +3175,8 @@ export default function TaskPage(): React.JSX.Element {
         preferredVisibleTaskProviders,
         {
           gitlabInstalled: preflightStatusCurrent && preflightStatus?.glab?.installed === true,
-          linearConnected: linearConnected === true
+          linearConnected: linearConnected === true,
+          hulyConnected: hulyConnected === true
         },
         defaultTaskSource
       ),
@@ -3443,8 +3457,22 @@ export default function TaskPage(): React.JSX.Element {
   const jiraTaskSourceScopeKey = jiraTaskSourceContext
     ? getTaskSourceCacheScope(jiraTaskSourceContext)
     : providerRuntimeContextKey
+  const hulyTaskSourceContext = useMemo(
+    () =>
+      normalizeTaskSourceContext({
+        provider: 'huly',
+        projectId: fallbackTaskSourceProjectId,
+        hostId: accountBackedTaskSourceHostId,
+        providerIdentity: {
+          provider: 'huly',
+          workspaceName: selectedHulyWorkspaceName
+        },
+        accountLabel: selectedHulyWorkspaceName
+      }),
+    [accountBackedTaskSourceHostId, fallbackTaskSourceProjectId, selectedHulyWorkspaceName]
+  )
   const accountBackedTaskSourceHostAvailability = useMemo<TaskSourceHostAvailability[]>(() => {
-    if (taskSource !== 'linear' && taskSource !== 'jira') {
+    if (taskSource !== 'linear' && taskSource !== 'jira' && taskSource !== 'huly') {
       return []
     }
     const host = hostRegistryById.get(accountBackedTaskSourceHostId)
@@ -3538,7 +3566,7 @@ export default function TaskPage(): React.JSX.Element {
       providerLabel,
       repoContexts: taskSourceRepoContexts,
       hostAvailability:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'huly'
           ? accountBackedTaskSourceHostAvailability
           : taskSourceHostAvailability,
       accountHostId: accountBackedTaskSourceHostId,
@@ -3546,11 +3574,13 @@ export default function TaskPage(): React.JSX.Element {
       selectedRepoCount: selectedRepos.length,
       linearWorkspaceName:
         selectedLinearWorkspace?.organizationName ?? selectedLinearWorkspace?.id ?? null,
-      jiraSiteName: selectedJiraSite?.displayName ?? selectedJiraSite?.siteUrl ?? null
+      jiraSiteName: selectedJiraSite?.displayName ?? selectedJiraSite?.siteUrl ?? null,
+      hulyWorkspaceName: selectedHulyWorkspaceName
     })
   }, [
     selectedJiraSite,
     selectedLinearWorkspace,
+    selectedHulyWorkspaceName,
     selectedRepos.length,
     sourceOptions,
     taskSource,
@@ -3566,11 +3596,11 @@ export default function TaskPage(): React.JSX.Element {
     return getTaskSourceAvailabilityNotice({
       providerLabel,
       sourceCount:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'huly'
           ? 1
           : Math.max(1, taskSourceRepoContexts.length),
       hostAvailability:
-        taskSource === 'linear' || taskSource === 'jira'
+        taskSource === 'linear' || taskSource === 'jira' || taskSource === 'huly'
           ? accountBackedTaskSourceHostAvailability
           : taskSourceHostAvailability,
       hostLabelById
@@ -8732,6 +8762,27 @@ export default function TaskPage(): React.JSX.Element {
     [linearTaskSourceContext, openModal]
   )
 
+  const openComposerForHulyItem = useCallback(
+    (issue: HulyIssue): void => {
+      const linkedWorkItem = buildHulyIssueLinkedWorkItem(issue)
+      openModal('new-workspace-composer', {
+        linkedWorkItem,
+        taskSourceContext: hulyTaskSourceContext,
+        prefilledName: getHulyIssueWorkspaceName(issue),
+        telemetrySource: 'sidebar'
+      })
+    },
+    [hulyTaskSourceContext, openModal]
+  )
+
+  const handleUseHulyItem = useCallback(
+    (issue: HulyIssue): void => {
+      useAppStore.getState().recordFeatureInteraction('huly-tasks')
+      openComposerForHulyItem(issue)
+    },
+    [openComposerForHulyItem]
+  )
+
   const handleUseLinearItem = useCallback(
     (issue: LinearIssue): void => {
       // Why: like handleUseWorkItem — open the pre-filled dialog instead of creating the worktree directly, so the user confirms name/agent/setup.
@@ -10995,6 +11046,16 @@ export default function TaskPage(): React.JSX.Element {
               onOpenIssue={openRelatedLinearIssue}
               onClose={closeTaskDetailPage}
               sourceContext={linearDetailSourceContext}
+            />
+          ) : taskSource === 'huly' ? (
+            <TaskPageHulyView
+              sourceContext={hulyTaskSourceContext}
+              connected={hulyStatusCurrent && hulyStatus?.enabled === true && hulyStatus?.available === true}
+              statusReady={hulyStatusCurrent && hulyStatusChecked}
+              workspaces={hulyStatus.workspaces ?? []}
+              selectedWorkspace={selectedHulyWorkspaceName}
+              onSelectWorkspace={setSelectedHulyWorkspaceName}
+              onUseIssue={handleUseHulyItem}
             />
           ) : !linearStatusReady ? (
             <div className="mt-4 flex items-center justify-center py-14">

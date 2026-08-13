@@ -4,16 +4,24 @@ import { useAppStore } from '@/store'
 import type { ProviderAccountScope, ProviderRateLimitScope } from './provider-account-scope'
 import { translate } from '@/i18n/i18n'
 
-type ProviderHostScopeControlProps = {
+export type ProviderHostScopeControlProps = {
   labelPrefix: string
   scope: ProviderAccountScope | ProviderRateLimitScope
   className?: string
+  /**
+   * Why: CLI-only providers (e.g. huly) have no server-owned credentials to
+   * edit. Hiding the action keeps the card from sending the user to a
+   * settings pane that does not apply. Defaults to true for parity with the
+   * stored-credential providers (Linear, Jira, GitHub).
+   */
+  showOpenServersAction?: boolean
 }
 
 export function ProviderHostScopeControl({
   labelPrefix,
   scope,
-  className
+  className,
+  showOpenServersAction = true
 }: ProviderHostScopeControlProps): React.JSX.Element {
   const openSettingsPage = useAppStore((state) => state.openSettingsPage)
   const openSettingsTarget = useAppStore((state) => state.openSettingsTarget)
@@ -45,11 +53,15 @@ export function ProviderHostScopeControl({
           className="shrink-0"
           onClick={openHostsSettings}
         >
-          <ServerCog className="size-3.5" />
-          {translate(
-            'auto.components.settings.ProviderHostScopeControl.change_host',
-            'Open Remote Servers'
-          )}
+          {showOpenServersAction ? (
+            <>
+              <ServerCog className="size-3.5" />
+              {translate(
+                'auto.components.settings.ProviderHostScopeControl.change_host',
+                'Open Remote Servers'
+              )}
+            </>
+          ) : null}
         </Button>
       </div>
     </div>

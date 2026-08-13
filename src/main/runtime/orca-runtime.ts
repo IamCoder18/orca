@@ -770,6 +770,33 @@ import {
   listTeamsOrThrow as listLinearTeamsOrThrow
 } from '../linear/teams'
 import {
+  addComment as addHulyCommentRpc,
+  createIssue as createHulyIssueRpc,
+  createProject as createHulyProjectRpc,
+  disableHuly,
+  enableHuly,
+  getHulyPreflight,
+  getHulyStatus,
+  getIssue as getHulyIssueRpc,
+  getProject as getHulyProjectRpc,
+  getTeamLabels as getHulyTeamLabelsRpc,
+  getTeamMembers as getHulyTeamMembersRpc,
+  getTeamStates as getHulyTeamStatesRpc,
+  listComments as listHulyCommentsRpc,
+  listIssues as listHulyIssuesRpc,
+  listProjects as listHulyProjectsRpc,
+  listTeams as listHulyTeamsRpc,
+  resetHulyPreflightCache,
+  updateIssue as updateHulyIssueRpc,
+  type ListHulyIssuesArgs
+} from '../huly'
+import type {
+  HulyCommentCreateArgs,
+  HulyIssueCreateArgs,
+  HulyIssueUpdate,
+  HulyProjectCreateArgs
+} from '../../shared/huly'
+import {
   connect as connectJira,
   disconnect as disconnectJira,
   getStatus as getJiraStatus,
@@ -34602,6 +34629,77 @@ export class OrcaRuntimeService {
 
   linearTeamMembers(teamId: string, workspaceId?: string): ReturnType<typeof getLinearTeamMembers> {
     return getLinearTeamMembers(teamId, workspaceId)
+  }
+
+  // ── Huly integration ──
+
+  hulyEnable(): ReturnType<typeof enableHuly> {
+    return enableHuly({ userDataPath: app.getPath('userData') })
+  }
+
+  hulyDisable(): Promise<void> {
+    return disableHuly({ userDataPath: app.getPath('userData') })
+  }
+
+  hulyStatus(): ReturnType<typeof getHulyStatus> {
+    return getHulyStatus({ userDataPath: app.getPath('userData') })
+  }
+
+  hulyPreflight(): ReturnType<typeof getHulyPreflight> {
+    resetHulyPreflightCache()
+    return getHulyPreflight({ userDataPath: app.getPath('userData') })
+  }
+
+  hulyListIssues(args: ListHulyIssuesArgs): ReturnType<typeof listHulyIssuesRpc> {
+    return listHulyIssuesRpc(args)
+  }
+
+  hulyGetIssue(id: string, workspace?: string): ReturnType<typeof getHulyIssueRpc> {
+    return getHulyIssueRpc(id, workspace)
+  }
+
+  hulyCreateIssue(args: HulyIssueCreateArgs, workspace?: string): ReturnType<typeof createHulyIssueRpc> {
+    return createHulyIssueRpc(args, workspace)
+  }
+
+  hulyUpdateIssue(id: string, update: HulyIssueUpdate, workspace?: string): ReturnType<typeof updateHulyIssueRpc> {
+    return updateHulyIssueRpc(id, update, workspace)
+  }
+
+  hulyAddComment(args: HulyCommentCreateArgs, workspace?: string): ReturnType<typeof addHulyCommentRpc> {
+    return addHulyCommentRpc(args, workspace)
+  }
+
+  hulyListComments(issueId: string, workspace?: string): ReturnType<typeof listHulyCommentsRpc> {
+    return listHulyCommentsRpc(issueId, workspace)
+  }
+
+  hulyListProjects(workspace?: string): ReturnType<typeof listHulyProjectsRpc> {
+    return listHulyProjectsRpc(workspace)
+  }
+
+  hulyGetProject(id: string, workspace?: string): ReturnType<typeof getHulyProjectRpc> {
+    return getHulyProjectRpc(id, workspace)
+  }
+
+  hulyCreateProject(args: HulyProjectCreateArgs, workspace?: string): ReturnType<typeof createHulyProjectRpc> {
+    return createHulyProjectRpc(args, workspace)
+  }
+
+  hulyListTeams(workspace?: string): ReturnType<typeof listHulyTeamsRpc> {
+    return listHulyTeamsRpc(workspace)
+  }
+
+  hulyGetTeamMembers(teamId: string, workspace?: string): ReturnType<typeof getHulyTeamMembersRpc> {
+    return getHulyTeamMembersRpc(teamId, workspace)
+  }
+
+  hulyGetTeamStates(teamId: string, workspace?: string): ReturnType<typeof getHulyTeamStatesRpc> {
+    return getHulyTeamStatesRpc(teamId, workspace)
+  }
+
+  hulyGetTeamLabels(teamId: string, workspace?: string): ReturnType<typeof getHulyTeamLabelsRpc> {
+    return getHulyTeamLabelsRpc(teamId, workspace)
   }
 
   // ── Jira integration ──

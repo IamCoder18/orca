@@ -290,6 +290,21 @@ import type {
   WorkspaceSessionState,
   LinuxPackageInstallInstructions
 } from '../shared/types'
+import type {
+  HulyComment,
+  HulyConnectionStatus,
+  HulyIssue,
+  HulyIssueCreateArgs,
+  HulyIssueUpdate,
+  HulyLabel,
+  HulyListFilter,
+  HulyPreflight,
+  HulyProjectCreateArgs,
+  HulyProjectSummary,
+  HulyTeamMember,
+  HulyTeamSummary,
+  HulyIssueState
+} from '../shared/huly'
 import type { PtyModelRestoreNeededEvent } from '../shared/pty-model-restore-marker'
 import type { PtyListedSession } from '../shared/pty-listed-session'
 import type {
@@ -2373,6 +2388,42 @@ export type PreloadApi = {
       projectKey: string
       siteId?: string
     }) => Promise<JiraProjectStatusOrder>
+  }
+  huly: {
+    enable: () => Promise<HulyConnectionStatus>
+    disable: () => Promise<void>
+    status: () => Promise<HulyConnectionStatus>
+    preflight: () => Promise<HulyPreflight>
+    listIssues: (args?: {
+      filter?: HulyListFilter
+      limit?: number
+      workspace?: string
+      search?: string
+      projectId?: string
+      teamId?: string
+    }) => Promise<HulyIssue[]>
+    getIssue: (args: { id: string; workspace?: string }) => Promise<HulyIssue | null>
+    createIssue: (
+      args: HulyIssueCreateArgs & { workspace?: string }
+    ) => Promise<HulyIssue | null>
+    updateIssue: (args: {
+      id: string
+      update: HulyIssueUpdate
+      workspace?: string
+    }) => Promise<HulyIssue | null>
+    addComment: (
+      args: { issueId: string; body: string; workspace?: string }
+    ) => Promise<HulyComment | null>
+    listComments: (args: { issueId: string; workspace?: string }) => Promise<HulyComment[]>
+    listProjects: (args?: { workspace?: string }) => Promise<HulyProjectSummary[]>
+    getProject: (args: { id: string; workspace?: string }) => Promise<HulyProjectSummary | null>
+    createProject: (
+      args: HulyProjectCreateArgs & { workspace?: string }
+    ) => Promise<HulyProjectSummary | null>
+    listTeams: (args?: { workspace?: string }) => Promise<HulyTeamSummary[]>
+    getTeamMembers: (args: { teamId: string; workspace?: string }) => Promise<HulyTeamMember[]>
+    getTeamStates: (args: { teamId: string; workspace?: string }) => Promise<HulyIssueState[]>
+    getTeamLabels: (args: { teamId: string; workspace?: string }) => Promise<HulyLabel[]>
   }
   starNag: {
     onShow: (

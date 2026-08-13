@@ -1,0 +1,193 @@
+import { useEffect } from 'react'
+import { AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Unlink } from 'lucide-react'
+import { HulyIcon } from '@/components/icons/HulyIcon'
+import { Button } from '@/components/ui/button'
+import { IntegrationCardDetails, IntegrationCardShell } from './integration-card-shell'
+import { HulyAgentSkillInstallCta } from './huly-agent-skill-install-cta'
+import { ProviderHostScopeControl } from './ProviderHostScopeControl'
+import { HULY_INTEGRATION_SECTION_ID } from './task-provider-integration-section-ids'
+import { getProviderAccountScope } from './provider-account-scope'
+import { getProviderRuntimeContextKey, hasRemoteProviderRuntime } from '@/lib/provider-runtime-context'
+import { useAppStore } from '@/store'
+import { HULY_CLI_INSTALL_COMMAND } from '@/lib/agent-feature-install-commands'
+
+export function HulyIntegrationCard(): React.JSX.Element {
+  const status = useAppStore((s) => s.hulyStatus)
+  const statusChecked = useAppStore((s) => s.hulyStatusChecked)
+  const statusContextKey = useAppStore((s) => s.hulyStatusContextKey)
+  const preflight = useAppStore((s) => s.hulyPreflightStatus)
+  const enableHuly = useAppStore((s) => s.enableHuly)
+  const disableHuly = useAppStore((s) => s.disableHuly)
+  const checkConnection = useAppStore((s) => s.checkHulyConnection)
+  const refreshPreflight = useAppStore((s) => s.refreshHulyPreflight)
+  const settings = useAppStore((s) => s.settings)
+
+  const contextKey = getProviderRuntimeContextKey(settings)
+  const contextMatches = statusContextKey === contextKey
+  const checking = !contextMatches || !statusChecked
+  const cliReady = preflight?.installed === true && preflight?.authenticated === true
+  const enabled = contextMatches && status?.enabled === true
+  const connected = enabled && status?.available === true
+  const viewer = status?.viewer
+  const accountScope = getProviderAccountScope(settings)
+  const isRemote = hasRemoteProviderRuntime(settings)
+  const installHost = isRemote ? 'Orca server' : 'this machine'
+
+  useEffect(() => {
+    void refreshPreflight()
+    void checkConnection(true)
+  }, [contextKey, refreshPreflight, checkConnection])
+
+  const statusTone = connected ? 'connected' : cliReady ? 'attention' : 'neutral'
+  const statusLabel = connected ? 'Connected' : cliReady ? 'Ready' : 'Not connected'
+
+  const description = connected
+    ? viewer?.email
+      ? `Connected to Huly as ${viewer.email}`
+      : 'Connected to Huly via the huly CLI.'
+    : checking
+      ? 'Checking Huly CLI access before showing setup actions.'
+      : cliReady
+        ? 'huly CLI detected. Click Connect to enable.'
+        : 'Browse, create, and start work from Huly issues.'
+
+  const action = connected ? (
+    <Button variant="outline" size="sm" onClick={() => void disableHuly()}>
+      <Unlink className="mr-1.5 size-3.5" />
+      Disconnect
+    </Button>
+  ) : cliReady ? (
+    <Button size="sm" onClick={() => void enableHuly()}>
+      Connect via huly CLI
+    </Button>
+  ) : null
+
+  return (
+    <IntegrationCardShell
+      settingsSectionId={HULY_INTEGRATION_SECTION_ID}
+      icon={<HulyIcon className="size-5" />}
+      name="Huly"
+      description={description}
+      statusLabel={statusLabel}
+      statusTone={statusTone}
+      checking={checking}
+      actions={!checking ? action : null}
+    >
+      <IntegrationCardDetails>
+        <ProviderHostScopeControl
+          labelPrefix="Account scope"
+          scope={accountScope}
+          showOpenServersAction={false}
+          className="text-xs"
+        />
+
+        {connected && viewer ? <ConnectedViewerRow viewer={viewer} /> : null}
+
+        {connected ? (
+          <Button variant="ghost" size="sm" onClick={() => void checkConnection(true)}>
+            <RefreshCw className="mr-1.5 size-3.5" />
+            Re-check
+          </Button>
+        ) : !checking ? (
+          <PreflightStatus
+            preflight={preflight}
+            installHost={installHost}
+            installCommand={HULY_CLI_INSTALL_COMMAND}
+            onRecheck={() => void refreshPreflight()}
+          />
+        ) : null}
+
+        <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+          Auth and URL are managed by the huly CLI. Change them with `huly auth login` or
+          `huly workspace switch`.{' '}
+          <a
+            href="https://github.com/IamCoder18/huly-cli"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <ExternalLink className="size-3" />
+            IamCoder18/huly-cli
+          </a>
+        </p>
+
+        <HulyAgentSkillInstallCta settings={settings} />
+      </IntegrationCardDetails>
+    </IntegrationCardShell>
+  )
+}
+
+function ConnectedViewerRow({
+  viewer
+}: {
+  viewer: NonNullable<ReturnType<typeof useAppStore.getState>['hulyStatus']>['viewer']
+}): React.JSX.Element {
+  if (!viewer) return <></>
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium text-foreground">{viewer.displayName}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {viewer.email ?? ''}
+          {viewer.workspaceName ? (viewer.email ? ' · ' : '') + viewer.workspaceName : ''}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function PreflightStatus({
+  preflight,
+  installHost,
+  installCommand,
+  onRecheck
+}: {
+  preflight: ReturnType<typeof useAppStore.getState>['hulyPreflightStatus']
+  installHost: string
+  installCommand: string
+  onRecheck: () => void
+}): React.JSX.Element {
+  if (!preflight) {
+    return <></>
+  }
+  if (!preflight.installed) {
+    return (
+      <div className="space-y-2">
+        <p className="inline-flex items-center gap-1.5 text-xs text-status-warning">
+          <AlertCircle className="size-3.5" />
+          huly CLI not detected on {installHost}. Run: {installCommand}
+        </p>
+        <Button variant="ghost" size="sm" onClick={onRecheck}>
+          <RefreshCw className="mr-1.5 size-3.5" />
+          Re-check
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      <p
+        className={
+          preflight.authenticated
+            ? 'inline-flex items-center gap-1.5 text-xs text-status-success'
+            : 'inline-flex items-center gap-1.5 text-xs text-status-warning'
+        }
+      >
+        {preflight.authenticated ? (
+          <CheckCircle2 className="size-3.5" />
+        ) : (
+          <AlertCircle className="size-3.5" />
+        )}
+        huly CLI installed
+        {preflight.version ? ` (${preflight.version})` : ''}
+        {preflight.authenticated
+          ? ''
+          : ` — run \`huly auth login\` on ${installHost}.`}
+      </p>
+      <Button variant="ghost" size="sm" onClick={onRecheck}>
+        <RefreshCw className="mr-1.5 size-3.5" />
+        Re-check
+      </Button>
+    </div>
+  )
+}

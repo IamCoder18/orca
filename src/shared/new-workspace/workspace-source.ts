@@ -1,4 +1,5 @@
 import { getLinearOrganizationUrlKeyFromIssueUrl } from '../linear-links'
+import type { HulyIssue } from '../huly'
 import type { FolderWorkspaceLinkedTask, JiraIssue, LinearIssue } from '../types'
 import {
   getLinkedWorkItemSuggestedName,
@@ -35,6 +36,13 @@ export type JiraWorkspaceSource = WorkspaceSourceLinkedItem & {
   type: 'issue'
 }
 
+export type HulyWorkspaceSource = WorkspaceSourceLinkedItem & {
+  provider: 'huly'
+  type: 'issue'
+  hulyIdentifier?: string
+  hulyWorkspaceName?: string
+}
+
 export type WorkspaceSourceItemLike = Omit<WorkspaceSourceLinkedItem, 'provider'> & {
   provider?: WorkspaceSourceProvider
 }
@@ -47,6 +55,7 @@ export type WorkspaceSourceSelectionKind =
   | 'branch'
   | 'linear'
   | 'jira'
+  | 'huly'
 
 export type WorkspaceSourceSelection = {
   kind: WorkspaceSourceSelectionKind
@@ -85,6 +94,9 @@ export function getWorkspaceSourceProvider(item: WorkspaceSourceItemLike): Works
   }
   if (item.jiraIdentifier || isJiraIssueUrl(item.url)) {
     return 'jira'
+  }
+  if (item.hulyIdentifier) {
+    return 'huly'
   }
   if (item.type === 'mr' || isGitLabIssueUrl(item.url)) {
     return 'gitlab'
@@ -155,6 +167,21 @@ export function buildJiraWorkspaceSource(
   }
 }
 
+export function buildHulyWorkspaceSource(
+  issue: Pick<HulyIssue, 'identifier' | 'title' | 'url' | 'workspaceName' | 'branchName'>
+): HulyWorkspaceSource {
+  return {
+    provider: 'huly',
+    type: 'issue',
+    number: 0,
+    title: issue.title,
+    url: issue.url,
+    hulyIdentifier: issue.identifier,
+    ...(issue.workspaceName ? { hulyWorkspaceName: issue.workspaceName } : {}),
+    ...(issue.branchName ? { hulyBranchName: issue.branchName } : {})
+  }
+}
+
 export function shouldApplyWorkspaceSourceAutoName(args: {
   currentName: string
   lastAutoName: string
@@ -196,17 +223,19 @@ export function buildWorkspaceSourceSelection(args: {
       ? 'linear'
       : provider === 'jira'
         ? 'jira'
-        : provider === 'gitlab'
-          ? linkedWorkItem.type === 'mr'
-            ? 'gitlab-mr'
-            : 'gitlab-issue'
-          : linkedWorkItem.type === 'pr'
-            ? 'github-pr'
-            : 'github-issue'
+        : provider === 'huly'
+          ? 'huly'
+          : provider === 'gitlab'
+            ? linkedWorkItem.type === 'mr'
+              ? 'gitlab-mr'
+              : 'gitlab-issue'
+            : linkedWorkItem.type === 'pr'
+              ? 'github-pr'
+              : 'github-issue'
   return {
     kind,
     label:
-      provider === 'linear' || provider === 'jira' || linkedWorkItem.number === 0
+      provider === 'linear' || provider === 'jira' || provider === 'huly' || linkedWorkItem.number === 0
         ? linkedWorkItem.title
         : `#${linkedWorkItem.number} ${linkedWorkItem.title}`,
     url: linkedWorkItem.url

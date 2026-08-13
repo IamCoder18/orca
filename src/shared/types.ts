@@ -358,13 +358,14 @@ export type FolderWorkspace = {
 }
 
 export type WorkspaceLinkedItem = {
-  provider: 'github' | 'gitlab' | 'linear' | 'jira'
+  provider: 'github' | 'gitlab' | 'linear' | 'jira' | 'huly'
   type: 'issue' | 'pr' | 'mr'
   number: number
   title: string
   url: string
   linearIdentifier?: string
   jiraIdentifier?: string
+  hulyIdentifier?: string
   repoId?: string
 }
 
