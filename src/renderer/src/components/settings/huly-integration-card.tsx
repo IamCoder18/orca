@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { AlertCircle, CheckCircle2, ExternalLink, RefreshCw, Unlink } from 'lucide-react'
+import { toast } from 'sonner'
 import { HulyIcon } from '@/components/icons/HulyIcon'
 import { Button } from '@/components/ui/button'
 import { IntegrationCardDetails, IntegrationCardShell } from './integration-card-shell'
@@ -57,7 +58,14 @@ export function HulyIntegrationCard(): React.JSX.Element {
       Disconnect
     </Button>
   ) : cliReady ? (
-    <Button size="sm" onClick={() => void enableHuly()}>
+    <Button
+      size="sm"
+      onClick={() => {
+        enableHuly().catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : 'Failed to connect Huly.')
+        })
+      }}
+    >
       Connect via huly CLI
     </Button>
   ) : null

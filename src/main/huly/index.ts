@@ -4,7 +4,6 @@ import type {
   HulyComment,
   HulyCommentCreateArgs,
   HulyConnectionStatus,
-  HulyEnableResult,
   HulyIssue,
   HulyIssueCreateArgs,
   HulyIssueState,
@@ -22,6 +21,7 @@ import type {
 import {
   HulyCliAuthError,
   HulyCliMissingError,
+  parseWhoamiJson,
   preflightHulyCli,
   runHulyCli
 } from './cli'
@@ -90,20 +90,18 @@ export async function getHulyStatus(env: HulyStateEnv): Promise<HulyConnectionSt
   }
 }
 
-export async function enableHuly(env: HulyStateEnv): Promise<HulyEnableResult> {
+export async function enableHuly(env: HulyStateEnv): Promise<HulyConnectionStatus> {
   const preflight = await getHulyPreflight(env)
   if (!preflight.installed) {
-    return {
-      ok: false,
-      error:
-        "The `huly` CLI is not installed. Install it with `npm i -g @iamcoder18/huly-cli`."
-    }
+    throw new Error(
+      "The `huly` CLI is not installed. Install it with `npm i -g @iamcoder18/huly-cli`."
+    )
   }
   if (!preflight.authenticated) {
-    return { ok: false, error: 'Run `huly auth login` in your terminal, then try again.' }
+    throw new Error('Run `huly auth login` in your terminal, then try again.')
   }
   await writeEnabled(env.userDataPath, true)
-  return { ok: true, status: await getHulyStatus(env) }
+  return await getHulyStatus(env)
 }
 
 export async function disableHuly(env: HulyStateEnv): Promise<void> {
@@ -130,21 +128,20 @@ async function safeFetchViewer(): Promise<HulyViewer | null> {
 
 // ── CLI passthrough helpers ─────────────────────────────────────────────
 
-export async function fetchViewer(): Promise<HulyViewer | null> {
+async function fetchViewer(): Promise<HulyViewer | null> {
   type RawViewer = { displayName?: string; email?: string | null; account?: string; active_workspace?: string; url?: string }
   const raw = await runHulyCli<RawViewer>(['whoami'])
-  const account = typeof raw.account === 'string' ? raw.account : null
-  const emailFromAccount = account?.startsWith('email:') ? account.slice('email:'.length) : account
-  const email = (typeof raw.email === 'string' ? raw.email : null) ?? emailFromAccount ?? null
+  const viewer = parseWhoamiJson(JSON.stringify(raw))
+  if (!viewer) return null
   return {
-    displayName: raw.displayName ?? email ?? raw.active_workspace ?? 'Huly user',
-    email,
-    workspaceName: raw.active_workspace,
-    workspaceUrl: raw.url
+    displayName: viewer.displayName,
+    email: viewer.email,
+    workspaceName: viewer.workspaceName ?? raw.active_workspace,
+    workspaceUrl: viewer.workspaceUrl ?? raw.url
   }
 }
 
-export async function listWorkspaces(): Promise<HulyWorkspace[]> {
+async function listWorkspaces(): Promise<HulyWorkspace[]> {
   type Raw = { name?: string; url?: string; uuid?: string; mode?: string }
   const raw = await runHulyCli<Raw[]>('workspace list'.split(' '))
   return raw

@@ -1,8 +1,10 @@
 import { execFile as defaultExec } from 'node:child_process'
+import { readdirSync, statSync } from 'node:fs'
 import { promisify } from 'node:util'
 import type {
   HulyCliCallOptions,
-  HulyPreflight
+  HulyPreflight,
+  HulyViewer
 } from '../../shared/huly'
 
 const execFileAsync = promisify(defaultExec)
@@ -38,13 +40,15 @@ export class HulyCliMissingError extends Error {
 // Why: GUI / Electron / systemd-launched processes don't inherit the user's
 // shell env, so NVM/fnm/asdf/volta installs of `huly` are not on PATH. Walk
 // the well-known node manager bin locations and prepend any that exist.
-export function expandHulyEnv(
-  env: Record<string, string | undefined>
-): Record<string, string | undefined> {
-  const home = env.HOME ?? process.env.HOME
-  if (!home) {
-    return env
-  }
+// Why: cached per (HOME,PATH) for the lifetime of the main process so we do
+// not block the event loop with readdirSync/statSync on every Huly RPC.
+let cachedEnv: { env: Record<string, string | undefined>; key: string } | null = null
+
+function envCacheKey(env: Record<string, string | undefined>): string {
+  return `${env.HOME ?? ''}::${env.PATH ?? process.env.PATH ?? ''}`
+}
+
+function walkHulyBinDirs(home: string): string[] {
   const candidates = [
     `${home}/.nvm/versions/node/*/bin`,
     `${home}/.fnm/node-versions/*/installation/bin`,
@@ -65,29 +69,45 @@ export function expandHulyEnv(
     const [head, tail] = pattern.split('/*', 2)
     const prefix = head.endsWith('/') ? head.slice(0, -1) : head
     const suffix = tail ?? ''
+    let entries: string[]
     try {
-      const { readdirSync } = require('node:fs') as typeof import('node:fs')
-      for (const entry of readdirSync(prefix)) {
-        const full = `${prefix}/${entry}${suffix}`
-        if (tryStat(full)) {
-          extra.push(full)
-        }
-      }
+      entries = readdirSync(prefix)
     } catch {
-      // missing directory — ignore
+      continue
+    }
+    for (const entry of entries) {
+      const full = `${prefix}/${entry}${suffix}`
+      if (tryStat(full)) {
+        extra.push(full)
+      }
     }
   }
-  if (extra.length === 0) {
+  return extra
+}
+
+export function expandHulyEnv(
+  env: Record<string, string | undefined>
+): Record<string, string | undefined> {
+  const home = env.HOME ?? process.env.HOME
+  if (!home) {
     return env
   }
-  const merged = { ...env }
-  merged.PATH = [...extra, env.PATH ?? process.env.PATH ?? ''].filter(Boolean).join(':')
+  const key = envCacheKey(env)
+  if (cachedEnv && cachedEnv.key === key) {
+    return cachedEnv.env
+  }
+  const extra = walkHulyBinDirs(home)
+  const merged: Record<string, string | undefined> = { ...env }
+  if (extra.length > 0) {
+    merged.PATH = [...extra, env.PATH ?? process.env.PATH ?? ''].filter(Boolean).join(':')
+  }
+  cachedEnv = { env: merged, key }
   return merged
 }
 
 function tryStat(path: string): boolean {
   try {
-    require('node:fs').statSync(path)
+    statSync(path)
     return true
   } catch {
     return false
@@ -99,9 +119,6 @@ export async function runHulyCli<T = unknown>(
   options: HulyCliCallOptions = {}
 ): Promise<T> {
   const env = expandHulyEnv(process.env as Record<string, string | undefined>)
-  if (options.url) {
-    env.HULY_URL = options.url
-  }
   if (options.workspace) {
     env.HULY_WORKSPACE = options.workspace
   }
@@ -109,9 +126,7 @@ export async function runHulyCli<T = unknown>(
   try {
     const { stdout } = await execFileAsync(HULY_CLI, ['--json', '--ci', ...args], {
       env,
-      timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      signal: options.signal,
-      shell: true
+      timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     })
     if (!stdout.trim()) {
       throw new HulyCliError('huly CLI returned empty output', 1, '')
@@ -133,19 +148,23 @@ export async function runHulyCli<T = unknown>(
   }
 }
 
-function parseIdentity(stdout: string): { email?: string; workspaceName?: string; workspaceUrl?: string; displayName?: string } | null {
+export function parseWhoamiJson(stdout: string): HulyViewer | null {
   const trimmed = stdout.trim()
   if (!trimmed) return null
   try {
     const parsed = JSON.parse(trimmed) as Record<string, unknown>
     const account = typeof parsed.account === 'string' ? parsed.account : null
-    const emailRaw = account?.startsWith('email:') ? account.slice('email:'.length) : account
-    const email = typeof parsed.email === 'string' ? parsed.email : emailRaw ?? undefined
+    const emailFromAccount = account?.startsWith('email:') ? account.slice('email:'.length) : account
+    const email =
+      (typeof parsed.email === 'string' ? parsed.email : null) ?? emailFromAccount ?? null
     return {
-      email: email || undefined,
+      displayName:
+        typeof parsed.displayName === 'string'
+          ? parsed.displayName
+          : email ?? (typeof parsed.active_workspace === 'string' ? parsed.active_workspace : '') ?? 'Huly user',
+      email,
       workspaceName: typeof parsed.active_workspace === 'string' ? parsed.active_workspace : undefined,
-      workspaceUrl: typeof parsed.url === 'string' ? parsed.url : undefined,
-      displayName: typeof parsed.displayName === 'string' ? parsed.displayName : email ?? undefined
+      workspaceUrl: typeof parsed.url === 'string' ? parsed.url : undefined
     }
   } catch {
     return null
@@ -157,22 +176,20 @@ export async function preflightHulyCli(_options: HulyCliCallOptions = {}): Promi
   try {
     const { stdout } = await execFileAsync(HULY_CLI, ['--version'], {
       env,
-      timeout: 5000,
-      shell: true
+      timeout: 5000
     })
     const version = stdout.trim().split('\n')[0] ?? ''
     try {
       const whoami = await execFileAsync(HULY_CLI, ['--json', '--ci', 'whoami'], {
         env,
-        timeout: 5000,
-        shell: true
+        timeout: 5000
       })
-      const identity = parseIdentity(whoami.stdout)
+      const identity = parseWhoamiJson(whoami.stdout)
       return {
         installed: true,
         authenticated: Boolean(identity?.email),
         version,
-        accountEmail: identity?.email
+        accountEmail: identity?.email ?? undefined
       }
     } catch {
       return { installed: true, authenticated: false, version }

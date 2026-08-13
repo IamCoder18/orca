@@ -44,8 +44,7 @@ const UpdateIssue = z.object({
     title: OptionalString,
     description: OptionalString,
     assigneeId: z.union([z.string(), z.null()]).optional(),
-    priority: z.number().int().min(0).max(4).optional(),
-    labelIds: z.array(z.string()).optional()
+    priority: z.number().int().min(0).max(4).optional()
   }),
   workspace: OptionalString
 })

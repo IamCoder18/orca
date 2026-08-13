@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useAppStore } from '@/store'
-import { hulyAddComment, hulyGetIssue, hulyListComments, hulyListTeams, hulyGetTeamStates, hulyUpdateIssue } from '@/runtime/runtime-huly-client'
+import { hulyAddComment, hulyGetIssue, hulyGetTeamStates, hulyListComments, hulyUpdateIssue } from '@/runtime/runtime-huly-client'
 import type { HulyComment, HulyIssue, HulyIssueState } from '../../../shared/huly'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
+import { PRIORITY_LABEL, stateToneClasses } from '@/lib/huly-presentation'
 import { formatUiRelativeTimeFromDate } from '@/i18n/relative-time-format'
 
 type Props = {
@@ -16,25 +17,6 @@ type Props = {
   onUse: (issue: HulyIssue) => void
   onClose: () => void
   sourceContext?: TaskSourceContext | null
-}
-
-const PRIORITY_LABEL: Record<number, string> = {
-  0: 'No priority',
-  1: 'Urgent',
-  2: 'High',
-  3: 'Medium',
-  4: 'Low'
-}
-
-function stateToneClasses(type: string): string {
-  const t = type.toLowerCase()
-  if (t === 'done' || t === 'completed' || t === 'closed') {
-    return 'border-status-success-border/50 bg-status-success-background/60 text-status-success'
-  }
-  if (t === 'in-progress' || t === 'started') {
-    return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-  }
-  return 'border-border bg-muted/60 text-muted-foreground'
 }
 
 function buildBranchName(issue: HulyIssue): string {
@@ -54,6 +36,7 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
   const settings = useAppStore((s) => s.settings)
   const providerSettings = sourceContext ?? settings
   const workspace = issue.workspaceName
+  const teamId = issue.team.id
 
   const [fullIssue, setFullIssue] = useState<HulyIssue>(issue)
   const [comments, setComments] = useState<HulyComment[]>([])
@@ -62,11 +45,6 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
   const [commentDraft, setCommentDraft] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
   const [savingState, setSavingState] = useState(false)
-
-  const loadIssue = useCallback(async (): Promise<void> => {
-    const fresh = await hulyGetIssue(providerSettings, issue.id, workspace ?? undefined)
-    if (fresh) setFullIssue(fresh)
-  }, [providerSettings, issue.id, workspace])
 
   const loadComments = useCallback(async (): Promise<void> => {
     setCommentsLoading(true)
@@ -80,23 +58,40 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
     }
   }, [providerSettings, issue.id, workspace])
 
-  const loadTeamsAndStates = useCallback(async (): Promise<void> => {
-    try {
-      const teamsResult = await hulyListTeams(providerSettings, workspace ?? undefined)
-      if (teamsResult.length > 0) {
-        const statesResult = await hulyGetTeamStates(providerSettings, teamsResult[0].id, workspace ?? undefined)
-        setStates(statesResult)
-      }
-    } catch (error) {
-      console.warn('[huly] loadTeamsAndStates failed', error)
+  const loadTeamStates = useCallback(async (): Promise<void> => {
+    if (!teamId) {
+      setStates([])
+      return
     }
-  }, [providerSettings, workspace])
+    try {
+      const statesResult = await hulyGetTeamStates(providerSettings, teamId, workspace ?? undefined)
+      setStates(statesResult)
+    } catch (error) {
+      console.warn('[huly] loadTeamStates failed', error)
+      setStates([])
+    }
+  }, [providerSettings, teamId, workspace])
 
   useEffect(() => {
-    void loadIssue()
-    void loadComments()
-    void loadTeamsAndStates()
-  }, [loadIssue, loadComments, loadTeamsAndStates])
+    let cancelled = false
+    void (async () => {
+      // Why: the parent already supplies a fully-populated HulyIssue; only refetch
+      // when description is missing so the user always sees a complete sheet.
+      if (!fullIssue.description) {
+        try {
+          const fresh = await hulyGetIssue(providerSettings, issue.id, workspace ?? undefined)
+          if (!cancelled && fresh) setFullIssue(fresh)
+        } catch {
+          // Why: silent — the cached prop is still rendered.
+        }
+      }
+      if (cancelled) return
+      await Promise.all([loadComments(), loadTeamStates()])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [providerSettings, issue.id, workspace, fullIssue.description, loadComments, loadTeamStates])
 
   const handleChangeState = async (stateId: string): Promise<void> => {
     setSavingState(true)
@@ -107,8 +102,12 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
         { stateId },
         workspace ?? undefined
       )
-      if (updated) setFullIssue(updated)
-      toast.success('State updated.')
+      if (updated) {
+        setFullIssue(updated)
+        toast.success('State updated.')
+      } else {
+        toast.error('State update returned no result.')
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update state.')
     } finally {
@@ -129,6 +128,8 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
       if (created) {
         setComments((prev) => [created, ...prev])
         setCommentDraft('')
+      } else {
+        toast.error('Failed to post comment.')
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to post comment.')

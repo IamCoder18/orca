@@ -1,16 +1,13 @@
 import type { StateCreator } from 'zustand'
 import type {
-  HulyComment,
   HulyConnectionStatus,
   HulyIssue,
   HulyIssueCreateArgs,
   HulyIssueUpdate,
-  HulyLabel,
   HulyListFilter,
   HulyPreflight,
   HulyProjectSummary,
-  HulyTeamSummary,
-  HulyIssueState
+  HulyTeamSummary
 } from '../../../../shared/huly'
 import { getProviderRuntimeContextKey } from '@/lib/provider-runtime-context'
 import type { AppState } from '../types'
@@ -19,16 +16,9 @@ import {
   type TaskSourceContext
 } from '../../../../shared/task-source-context'
 import {
-  hulyAddComment,
   hulyCreateIssue,
-  hulyCreateProject,
   hulyDisable,
   hulyEnable,
-  hulyGetIssue,
-  hulyGetTeamLabels,
-  hulyGetTeamMembers,
-  hulyGetTeamStates,
-  hulyListComments,
   hulyListIssues,
   hulyListProjects,
   hulyListTeams,
@@ -46,12 +36,19 @@ function isFresh<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
 }
 
 function evictStaleEntries<T>(cache: Record<string, CacheEntry<T>>): Record<string, CacheEntry<T>> {
-  const keys = Object.keys(cache)
-  if (keys.length <= MAX_CACHE_ENTRIES) return cache
-  const sorted = keys.sort((a, b) => (cache[a]?.fetchedAt ?? 0) - (cache[b]?.fetchedAt ?? 0))
+  const now = Date.now()
+  const byAge: Record<string, CacheEntry<T>> = {}
+  for (const [key, entry] of Object.entries(cache)) {
+    if (now - entry.fetchedAt < CACHE_TTL) {
+      byAge[key] = entry
+    }
+  }
+  const keys = Object.keys(byAge)
+  if (keys.length <= MAX_CACHE_ENTRIES) return byAge
+  const sorted = keys.sort((a, b) => (byAge[a]?.fetchedAt ?? 0) - (byAge[b]?.fetchedAt ?? 0))
   const pruned: Record<string, CacheEntry<T>> = {}
   for (const key of sorted.slice(sorted.length - MAX_CACHE_ENTRIES)) {
-    pruned[key] = cache[key]
+    pruned[key] = byAge[key]
   }
   return pruned
 }
@@ -87,39 +84,22 @@ export type HulySlice = {
   hulyStatusChecked: boolean
   hulyStatusContextKey: string | null
   hulyPreflightStatus: HulyPreflight | null
-  hulyPreflightContextKey: string | null
-  hulyIssueCache: Record<string, CacheEntry<HulyIssue | null>>
   hulyListCache: Record<string, CacheEntry<HulyIssue[]>>
-  hulyCommentsCache: Record<string, CacheEntry<HulyComment[]>>
   hulyProjectsCache: Record<string, CacheEntry<HulyProjectSummary[]>>
   hulyTeamsCache: Record<string, CacheEntry<HulyTeamSummary[]>>
-  hulyTeamMembersCache: Record<string, CacheEntry<HulyTeamMemberSummary[]>>
-  hulyTeamStatesCache: Record<string, CacheEntry<HulyIssueState[]>>
-  hulyTeamLabelsCache: Record<string, CacheEntry<HulyLabel[]>>
 
   checkHulyConnection: (force?: boolean) => Promise<void>
   refreshHulyPreflight: () => Promise<void>
   enableHuly: () => Promise<HulyConnectionStatus | null>
   disableHuly: () => Promise<void>
 
-  fetchHulyIssue: (id: string, options?: HulyFetchOptions) => Promise<HulyIssue | null>
   listHulyIssues: (args?: HulyListArgs, options?: HulyFetchOptions) => Promise<HulyIssue[]>
   createHulyIssue: (args: HulyIssueCreateArgs, options?: HulyFetchOptions) => Promise<HulyIssue | null>
   updateHulyIssue: (id: string, update: HulyIssueUpdate, options?: HulyFetchOptions) => Promise<HulyIssue | null>
 
-  listHulyComments: (issueId: string, options?: HulyFetchOptions) => Promise<HulyComment[]>
-  addHulyComment: (issueId: string, body: string, options?: HulyFetchOptions) => Promise<HulyComment | null>
-
   listHulyProjects: (options?: HulyFetchOptions) => Promise<HulyProjectSummary[]>
-  createHulyProject: (name: string, description?: string, options?: HulyFetchOptions) => Promise<HulyProjectSummary | null>
-
   listHulyTeams: (options?: HulyFetchOptions) => Promise<HulyTeamSummary[]>
-  getHulyTeamMembers: (teamId: string, options?: HulyFetchOptions) => Promise<HulyTeamMemberSummary[]>
-  getHulyTeamStates: (teamId: string, options?: HulyFetchOptions) => Promise<HulyIssueState[]>
-  getHulyTeamLabels: (teamId: string, options?: HulyFetchOptions) => Promise<HulyLabel[]>
 }
-
-type HulyTeamMemberSummary = { id: string; displayName: string; email?: string | null }
 
 const initialHulyStatus: HulyConnectionStatus = {
   enabled: false,
@@ -133,15 +113,9 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
   hulyStatusChecked: false,
   hulyStatusContextKey: null,
   hulyPreflightStatus: null,
-  hulyPreflightContextKey: null,
-  hulyIssueCache: {},
   hulyListCache: {},
-  hulyCommentsCache: {},
   hulyProjectsCache: {},
   hulyTeamsCache: {},
-  hulyTeamMembersCache: {},
-  hulyTeamStatesCache: {},
-  hulyTeamLabelsCache: {},
 
   async checkHulyConnection(force = false) {
     const settings = get().settings
@@ -168,15 +142,13 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
 
   async refreshHulyPreflight() {
     const settings = get().settings
-    const contextKey = getProviderRuntimeContextKey(settings)
     try {
       const result = await hulyPreflight(settings)
-      set({ hulyPreflightStatus: result, hulyPreflightContextKey: contextKey })
+      set({ hulyPreflightStatus: result })
     } catch (error) {
       console.warn('[huly] preflight failed', error)
       set({
-        hulyPreflightStatus: { installed: false, authenticated: false },
-        hulyPreflightContextKey: contextKey
+        hulyPreflightStatus: { installed: false, authenticated: false }
       })
     }
   },
@@ -194,34 +166,16 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
 
   async disableHuly() {
     const settings = get().settings
-    await hulyDisable(settings)
+    try {
+      await hulyDisable(settings)
+    } catch (error) {
+      console.warn('[huly] disable failed', error)
+    }
     set({
       hulyStatus: { ...initialHulyStatus },
       hulyStatusChecked: true,
       hulyStatusContextKey: getProviderRuntimeContextKey(settings)
     })
-  },
-
-  async fetchHulyIssue(id, options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}::${id}`
-    const cached = get().hulyIssueCache[cacheKey]
-    if (!options?.force && isFresh(cached)) {
-      return cached.data
-    }
-    try {
-      const issue = await hulyGetIssue(ctx, id, options?.workspace ?? undefined)
-      set((state) => ({
-        hulyIssueCache: {
-          ...state.hulyIssueCache,
-          [cacheKey]: { data: issue, fetchedAt: Date.now() }
-        }
-      }))
-      return issue
-    } catch (error) {
-      console.warn('[huly] getIssue failed', error)
-      return null
-    }
   },
 
   async listHulyIssues(args = {}, options) {
@@ -257,12 +211,17 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
     try {
       const issue = await hulyCreateIssue(ctx, args, options?.workspace ?? undefined)
       if (issue) {
-        set((state) => ({
-          hulyListCache: evictStaleEntries({
-            ...state.hulyListCache,
-            __created__: { data: [issue, ...Object.values(state.hulyListCache)[0]?.data ?? []].slice(0, 50), fetchedAt: Date.now() }
-          })
-        }))
+        const scope = hulyCacheScope(options?.sourceContext)
+        const workspaceKey = workspacePart(options?.workspace)
+        set((state) => {
+          const next = { ...state.hulyListCache }
+          for (const key of Object.keys(next)) {
+            if (key.startsWith(`${scope}::${workspaceKey}::`)) {
+              delete next[key]
+            }
+          }
+          return { hulyListCache: evictStaleEntries(next) }
+        })
       }
       return issue
     } catch (error) {
@@ -277,55 +236,6 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
       return await hulyUpdateIssue(ctx, id, update, options?.workspace ?? undefined)
     } catch (error) {
       console.warn('[huly] updateIssue failed', error)
-      return null
-    }
-  },
-
-  async listHulyComments(issueId, options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}::${issueId}`
-    const cached = get().hulyCommentsCache[cacheKey]
-    if (!options?.force && isFresh(cached)) {
-      return cached.data ?? []
-    }
-    try {
-      const comments = await hulyListComments(ctx, issueId, options?.workspace ?? undefined)
-      set((state) => ({
-        hulyCommentsCache: evictStaleEntries({
-          ...state.hulyCommentsCache,
-          [cacheKey]: { data: comments, fetchedAt: Date.now() }
-        })
-      }))
-      return comments
-    } catch (error) {
-      console.warn('[huly] listComments failed', error)
-      return []
-    }
-  },
-
-  async addHulyComment(issueId, body, options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    try {
-      const comment = await hulyAddComment(
-        ctx,
-        { issueId, body },
-        options?.workspace ?? undefined
-      )
-      if (comment) {
-        const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}::${issueId}`
-        set((state) => {
-          const existing = state.hulyCommentsCache[cacheKey]?.data ?? []
-          return {
-            hulyCommentsCache: {
-              ...state.hulyCommentsCache,
-              [cacheKey]: { data: [comment, ...existing], fetchedAt: Date.now() }
-            }
-          }
-        })
-      }
-      return comment
-    } catch (error) {
-      console.warn('[huly] addComment failed', error)
       return null
     }
   },
@@ -352,20 +262,6 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
     }
   },
 
-  async createHulyProject(name, description, options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    try {
-      return await hulyCreateProject(
-        ctx,
-        { name, description, workspaceName: options?.workspace ?? undefined },
-        options?.workspace ?? undefined
-      )
-    } catch (error) {
-      console.warn('[huly] createProject failed', error)
-      return null
-    }
-  },
-
   async listHulyTeams(options) {
     const ctx = hulyCallContext(options?.sourceContext)
     const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}`
@@ -384,77 +280,6 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
       return teams
     } catch (error) {
       console.warn('[huly] listTeams failed', error)
-      return []
-    }
-  },
-
-  async getHulyTeamMembers(teamId, options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}::${teamId}`
-    const cached = get().hulyTeamMembersCache[cacheKey]
-    if (!options?.force && isFresh(cached)) {
-      return cached.data ?? []
-    }
-    try {
-      const members = await hulyGetTeamMembers(ctx, teamId, options?.workspace ?? undefined)
-      const summaries: HulyTeamMemberSummary[] = members.map((m) => ({
-        id: m.id,
-        displayName: m.displayName,
-        email: m.email
-      }))
-      set((state) => ({
-        hulyTeamMembersCache: evictStaleEntries({
-          ...state.hulyTeamMembersCache,
-          [cacheKey]: { data: summaries, fetchedAt: Date.now() }
-        })
-      }))
-      return summaries
-    } catch (error) {
-      console.warn('[huly] getTeamMembers failed', error)
-      return []
-    }
-  },
-
-  async getHulyTeamStates(teamId, options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}::${teamId}::states`
-    const cached = get().hulyTeamStatesCache[cacheKey]
-    if (!options?.force && isFresh(cached)) {
-      return cached.data ?? []
-    }
-    try {
-      const states = await hulyGetTeamStates(ctx, teamId, options?.workspace ?? undefined)
-      set((state) => ({
-        hulyTeamStatesCache: evictStaleEntries({
-          ...state.hulyTeamStatesCache,
-          [cacheKey]: { data: states, fetchedAt: Date.now() }
-        })
-      }))
-      return states
-    } catch (error) {
-      console.warn('[huly] getTeamStates failed', error)
-      return []
-    }
-  },
-
-  async getHulyTeamLabels(teamId, options) {
-    const ctx = hulyCallContext(options?.sourceContext)
-    const cacheKey = `${hulyCacheScope(options?.sourceContext)}::${workspacePart(options?.workspace)}::${teamId}::labels`
-    const cached = get().hulyTeamLabelsCache[cacheKey]
-    if (!options?.force && isFresh(cached)) {
-      return cached.data ?? []
-    }
-    try {
-      const labels = await hulyGetTeamLabels(ctx, teamId, options?.workspace ?? undefined)
-      set((state) => ({
-        hulyTeamLabelsCache: evictStaleEntries({
-          ...state.hulyTeamLabelsCache,
-          [cacheKey]: { data: labels, fetchedAt: Date.now() }
-        })
-      }))
-      return labels
-    } catch (error) {
-      console.warn('[huly] getTeamLabels failed', error)
       return []
     }
   }

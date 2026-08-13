@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ExternalLink, LoaderCircle, Plus, Search } from 'lucide-react'
 import { HulyIcon } from '@/components/icons/HulyIcon'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import type { HulyIssue, HulyListFilter } from '../../../shared/huly'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { HulyIssueWorkspace } from './HulyIssueWorkspace'
 import { HulyCreateIssueDialog } from './HulyCreateIssueDialog'
+import { PRIORITY_LABEL, stateToneClasses } from '@/lib/huly-presentation'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -26,25 +27,6 @@ const FILTERS: { id: HulyListFilter; label: string }[] = [
   { id: 'created', label: 'Created by me' },
   { id: 'all', label: 'All open' }
 ]
-
-const PRIORITY_LABEL: Record<number, string> = {
-  0: 'No priority',
-  1: 'Urgent',
-  2: 'High',
-  3: 'Medium',
-  4: 'Low'
-}
-
-function stateTone(type: string): string {
-  const t = type.toLowerCase()
-  if (t === 'done' || t === 'completed' || t === 'closed') {
-    return 'border-status-success-border/50 bg-status-success-background/60 text-status-success'
-  }
-  if (t === 'in-progress' || t === 'started') {
-    return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-  }
-  return 'border-border bg-muted/60 text-muted-foreground'
-}
 
 const ALL_WORKSPACES = '__all__'
 
@@ -65,8 +47,14 @@ export function TaskPageHulyView({
   const [error, setError] = useState<string | null>(null)
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
   const workspacesKey = workspaces.map((w) => w.id).join(',')
   const workspace = selectedWorkspace
+
+  const handleCreated = useCallback((): void => {
+    setCreateOpen(false)
+    setRefreshKey((n) => n + 1)
+  }, [])
 
   useEffect(() => {
     if (!connected) {
@@ -78,7 +66,7 @@ export function TaskPageHulyView({
     setError(null)
     void listIssues(
       { filter, limit: 50 },
-      { sourceContext, workspace: workspace ?? undefined }
+      { sourceContext, workspace: workspace ?? undefined, force: true }
     )
       .then((result) => {
         if (cancelled) return
@@ -94,7 +82,7 @@ export function TaskPageHulyView({
     return () => {
       cancelled = true
     }
-  }, [connected, filter, listIssues, sourceContext, workspacesKey, workspace])
+  }, [connected, filter, listIssues, sourceContext, workspacesKey, workspace, refreshKey])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -232,7 +220,7 @@ export function TaskPageHulyView({
                     <span
                       className={cn(
                         'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium',
-                        stateTone(issue.state.type)
+                        stateToneClasses(issue.state.type)
                       )}
                     >
                       {issue.state.name}
@@ -271,6 +259,7 @@ export function TaskPageHulyView({
         <HulyCreateIssueDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
+          onCreated={handleCreated}
           sourceContext={sourceContext}
           workspace={workspace ?? null}
         />

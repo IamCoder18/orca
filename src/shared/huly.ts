@@ -2,9 +2,6 @@
 // returns JSON shapes that we normalize once here so every downstream layer
 // (IPC, RPC, store, UI) sees a stable type contract.
 
-export type HulyCliAuthError = 'huly-cli-auth-error'
-export type HulyCliMissingError = 'huly-cli-missing-error'
-
 export type HulyViewer = {
   displayName: string
   email: string | null
@@ -53,13 +50,6 @@ export type HulyProjectSummary = {
   url?: string
 }
 
-export type HulyIssueChildSummary = {
-  id: string
-  identifier: string
-  title: string
-  url: string
-}
-
 export type HulyIssue = {
   id: string
   identifier: string
@@ -76,7 +66,6 @@ export type HulyIssue = {
   priority: number
   dueDate?: string | null
   updatedAt: string
-  subIssues?: HulyIssueChildSummary[]
   // Why: optional metadata carried by the renderer when wiring the issue to
   // the new-workspace composer; the daemon never returns these.
   branchName?: string
@@ -97,7 +86,6 @@ export type HulyIssueUpdate = {
   description?: string
   assigneeId?: string | null
   priority?: number
-  labelIds?: string[]
 }
 
 export type HulyIssueCreateArgs = {
@@ -122,9 +110,7 @@ export type HulyProjectCreateArgs = {
 
 export type HulyCliCallOptions = {
   workspace?: string
-  url?: string
   timeoutMs?: number
-  signal?: AbortSignal
 }
 
 export type HulyPreflight = {
@@ -142,7 +128,3 @@ export type HulyConnectionStatus = {
   workspaces: HulyWorkspace[]
   cliVersion?: string
 }
-
-export type HulyEnableResult =
-  | { ok: true; status: HulyConnectionStatus }
-  | { ok: false; error: string }

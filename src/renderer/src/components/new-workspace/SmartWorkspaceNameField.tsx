@@ -428,7 +428,7 @@ export default function SmartWorkspaceNameField({
   )
   const availableTaskProviders = useMemo(
     () =>
-      filterAvailableTaskProviders(['github', 'gitlab', 'linear'], {
+      filterAvailableTaskProviders(['github', 'gitlab', 'linear', 'jira', 'huly'], {
         gitlabInstalled: gitlabSourceAvailable,
         linearConnected: linearStatus.connected === true,
         hulyConnected: hulyStatus?.enabled === true && hulyStatus?.available === true
@@ -1280,7 +1280,7 @@ export default function SmartWorkspaceNameField({
   const isQueryStale = trimmedValue.length > 0 && trimmedDebouncedQuery !== trimmedValue
 
   // Why: when the typed value is an unambiguous source ref, snap the highlight to that row so Enter picks it over the typed-text fallback.
-  const sourceIntent = useMemo<'github' | 'gitlab' | 'linear' | 'jira' | null>(() => {
+  const sourceIntent = useMemo<'github' | 'gitlab' | 'linear' | 'jira' | 'huly' | null>(() => {
     if (!isSmartWorkspaceSourceQueryWithinLimit(value)) {
       return null
     }
@@ -1300,8 +1300,12 @@ export default function SmartWorkspaceNameField({
     if (linearAvailable && /^[A-Za-z][A-Za-z0-9_]*-\d+$/.test(trimmed)) {
       return 'linear'
     }
+    const hulyAvailable = availableTaskProviders.includes('huly')
+    if (hulyAvailable && /^[A-Za-z][A-Za-z0-9_]*-\d+$/.test(trimmed)) {
+      return 'huly'
+    }
     return null
-  }, [jiraSource.intent, linearAvailable, value])
+  }, [jiraSource.intent, linearAvailable, value, availableTaskProviders])
 
   const resolvedCommandValue = resolveSmartWorkspaceCommandValue({
     currentValue: commandValue,
