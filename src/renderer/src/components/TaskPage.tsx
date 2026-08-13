@@ -3049,6 +3049,7 @@ export default function TaskPage(): React.JSX.Element {
   const searchJiraIssues = useAppStore((s) => s.searchJiraIssues)
   const listJiraIssues = useAppStore((s) => s.listJiraIssues)
   const checkJiraConnection = useAppStore((s) => s.checkJiraConnection)
+  const checkHulyConnection = useAppStore((s) => s.checkHulyConnection)
   const hulyStatusRaw = useAppStore((s) => s.hulyStatus)
   const hulyStatus = hulyStatusRaw ?? { enabled: false, available: false, viewer: null, workspaces: [] }
   const hulyStatusChecked = useAppStore((s) => s.hulyStatusChecked)
@@ -7984,10 +7985,16 @@ export default function TaskPage(): React.JSX.Element {
     if (!jiraStatusReady) {
       void checkJiraConnection()
     }
+    if (!hulyStatusCurrent || !hulyStatusChecked) {
+      void checkHulyConnection()
+    }
   }, [
+    checkHulyConnection,
     checkJiraConnection,
     checkLinearConnection,
     expectedPreflightContextKey,
+    hulyStatusChecked,
+    hulyStatusContextKey,
     jiraStatusContextKey,
     jiraStatusReady,
     linearStatusContextKey,
