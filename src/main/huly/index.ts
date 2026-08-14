@@ -377,12 +377,13 @@ function toIssue(raw: RawIssue): HulyIssue | null {
   // `huly issue get`. URL falls back to huly.app when the workspace URL is
   // unknown (the cli whoami exposes it but isn't passed here).
   const workspaceUrl = asString(raw.workspaceUrl) ?? asString(raw.workspace_url)
+  const safeIdentifier = identifier ?? id ?? ''
   const url =
     asString(raw.url) ??
     asString(raw.link) ??
     (workspaceUrl
-      ? `https://huly.app/workspace/${workspaceUrl}/issue/${identifier ?? id}`
-      : `https://huly.app/issue/${identifier ?? id}`)
+      ? `https://huly.app/workspace/${encodeURIComponent(workspaceUrl)}/issue/${encodeURIComponent(safeIdentifier)}`
+      : `https://huly.app/issue/${encodeURIComponent(safeIdentifier)}`)
   if (!id || !identifier || !title || !url) return null
 
   const stateRaw = raw.state as Record<string, unknown> | undefined
@@ -411,7 +412,6 @@ const teamName: string = readableNameFromId(
 )
 
   const assigneeRaw = raw.assignee as Record<string, unknown> | undefined
-  const assigneeStringId = asString(raw.assignee)
   const projectRaw = raw.project as Record<string, unknown> | undefined
   const projectStringId = asString(raw.project)
 
@@ -451,16 +451,16 @@ const teamName: string = readableNameFromId(
       assigneeRaw && asString(assigneeRaw.id)
         ? {
             id: assigneeRaw.id as string,
-            displayName: asString(assigneeRaw.displayName) ?? asString(assigneeRaw.name) ?? '',
+            displayName:
+              asString(assigneeRaw.displayName) ?? asString(assigneeRaw.name) ?? undefined,
             email: asString(assigneeRaw.email) ?? null
           }
-        : assigneeStringId
-          ? { id: assigneeStringId, displayName: assigneeStringId }
-          : undefined,
+        : undefined,
     labels: asStringArray(raw.labels),
     priority: asNumber(raw.priority),
     dueDate: asString(raw.dueDate) ?? null,
-    updatedAt: asString(raw.updatedAt) ?? asString(raw.updated_at) ?? new Date().toISOString(),
+    updatedAt: asString(raw.updatedAt) ?? asString(raw.updated_at) ?? '',
+    createdAt: asString(raw.createdAt) ?? asString(raw.created_at) ?? '',
     ...(asString(raw.createdBy) ? { createdBy: asString(raw.createdBy)! } : {})
   }
 }

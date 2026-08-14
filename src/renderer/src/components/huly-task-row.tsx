@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 import { HulyTaskStateChanger } from './huly-task-state-changer'
 
 export const HULY_TASK_ROW_SURFACE_CLASS = 'bg-background transition-colors'
-export const HULY_TASK_ROW_HOVER_SURFACE_CLASS = 'group/huly-task-row:bg-accent'
+export const HULY_TASK_ROW_HOVER_SURFACE_CLASS = 'group-hover/huly-task-row:bg-accent'
 export const HULY_TASK_HEADER_SURFACE_CLASS =
   '[background:color-mix(in_srgb,var(--muted)_25%,var(--background))]'
 
@@ -27,7 +27,7 @@ export const HULY_TASK_STICKY_ID_CELL_CLASS = cn(
   HULY_TASK_ROW_HOVER_SURFACE_CLASS
 )
 export const HULY_TASK_STICKY_TITLE_CELL_CLASS = cn(
-  'sticky left-[92px] z-20 flex min-w-0 flex-col justify-center border-r border-border/40 pr-2 before:absolute before:-left-2 before:top-0 before:bottom-0 before:w-2 before:bg-inherit',
+  'sticky left-[128px] z-20 flex min-w-0 flex-col justify-center border-r border-border/40 pr-2 before:absolute before:-left-2 before:top-0 before:bottom-0 before:w-2 before:bg-inherit',
   HULY_TASK_ROW_SURFACE_CLASS,
   HULY_TASK_ROW_HOVER_SURFACE_CLASS
 )
@@ -42,6 +42,8 @@ type Props = {
   settings?: GlobalSettings | null
   onOpen: (issue: HulyIssue) => void
   onOpenInHuly: (issue: HulyIssue) => void
+  onUse?: (issue: HulyIssue) => void
+  onIssueUpdate?: (issue: HulyIssue) => void
 }
 
 export function HulyTaskRow({
@@ -50,7 +52,9 @@ export function HulyTaskRow({
   sourceContext,
   settings,
   onOpen,
-  onOpenInHuly
+  onOpenInHuly,
+  onUse,
+  onIssueUpdate
 }: Props): React.JSX.Element {
   const handleClick = (): void => onOpen(issue)
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -63,6 +67,25 @@ export function HulyTaskRow({
     event.stopPropagation()
     onOpenInHuly(issue)
   }
+  const handleUse = (event: React.MouseEvent): void => {
+    event.stopPropagation()
+    onUse?.(issue)
+  }
+  const updatedRelative = issue.updatedAt
+    ? formatUiRelativeTimeFromDate(issue.updatedAt, '')
+    : ''
+  const updatedAbsolute = issue.updatedAt ? new Date(issue.updatedAt).toLocaleString() : ''
+  const closedBadge =
+    issue.state.name && (issue.state.type === 'done' || issue.state.type === 'closed') ? (
+      <span
+        className={cn(
+          'shrink-0 rounded-md border px-1.5 py-0 text-[10px] font-medium',
+          stateToneClasses(issue.state.type)
+        )}
+      >
+        {issue.state.name}
+      </span>
+    ) : null
   return (
     <div
       role="button"
@@ -91,18 +114,9 @@ export function HulyTaskRow({
             issue={issue}
             sourceContext={sourceContext ?? null}
             settings={settings}
-            onOpen={onOpen}
+            onUpdate={onIssueUpdate}
           />
-          {issue.state.type === 'done' || issue.state.type === 'closed' ? (
-            <span
-              className={cn(
-                'shrink-0 rounded-md border px-1.5 py-0 text-[10px] font-medium',
-                stateToneClasses(issue.state.type)
-              )}
-            >
-              {issue.state.name}
-            </span>
-          ) : null}
+          {closedBadge}
           {issue.priority > 0 ? (
             <span className="shrink-0">
               <HulyPriorityIcon priority={issue.priority} />
@@ -111,7 +125,7 @@ export function HulyTaskRow({
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px] text-muted-foreground">
           <span>
-            {issue.assignee?.displayName ??
+            {issue.assignee?.displayName ||
               translate('auto.components.TaskPage.huly.unassigned', 'Unassigned')}
           </span>
           {showTeam ? <span>{issue.team.name}</span> : null}
@@ -127,11 +141,40 @@ export function HulyTaskRow({
         </div>
       </div>
 
-      <div className="flex items-center text-xs text-muted-foreground">
-        {formatUiRelativeTimeFromDate(issue.updatedAt)}
-      </div>
+      {updatedAbsolute ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center text-xs text-muted-foreground">
+              {updatedRelative}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6}>
+            {updatedAbsolute}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <div className="flex items-center text-xs text-muted-foreground">—</div>
+      )}
 
       <div className="flex items-center justify-end gap-1">
+        {onUse ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={handleUse}
+                className="min-w-[72px] gap-1 bg-background/80 font-semibold shadow-xs"
+              >
+                {translate('auto.components.TaskPage.huly.useInWorktree', 'Use')}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" sideOffset={4}>
+              {translate('auto.components.TaskPage.huly.useInWorktree', 'Use in Worktree')}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

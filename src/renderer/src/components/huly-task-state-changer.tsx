@@ -1,7 +1,9 @@
 // Why: GitHub's row hover surfaces inline status mutation. Mirror that for
 // Huly — click the row's state badge to change state without opening the
-// detail workspace. Falls back to opening the detail workspace if team
-// states aren't loaded yet.
+// detail workspace. Always shows the current state name; the popover opens
+// to swap states once they've loaded. The team-state fetch is deduped via a
+// module-level cache so opening N row changers for one team spawns one CLI
+// process.
 import React, { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -17,14 +19,42 @@ type Props = {
   issue: HulyIssue
   sourceContext: TaskSourceContext | null
   settings: GlobalSettings | null | undefined
-  onOpen: (issue: HulyIssue) => void
+  onUpdate?: (issue: HulyIssue) => void
+}
+
+const TEAM_STATES_TTL_MS = 60_000
+const teamStatesCache = new Map<string, { data: HulyIssueState[]; fetchedAt: number }>()
+const inflightTeamStates = new Map<string, Promise<HulyIssueState[]>>()
+
+async function loadTeamStatesCached(
+  ctx: NonNullable<Props['sourceContext']> | NonNullable<Props['settings']>,
+  teamId: string,
+  workspace: string | undefined
+): Promise<HulyIssueState[]> {
+  const cacheKey = `${workspace ?? ''}::${teamId}`
+  const cached = teamStatesCache.get(cacheKey)
+  if (cached && Date.now() - cached.fetchedAt < TEAM_STATES_TTL_MS) {
+    return cached.data
+  }
+  const inflight = inflightTeamStates.get(cacheKey)
+  if (inflight) return inflight
+  const promise = hulyGetTeamStates(ctx, teamId, workspace)
+    .then((result) => {
+      teamStatesCache.set(cacheKey, { data: result, fetchedAt: Date.now() })
+      return result
+    })
+    .finally(() => {
+      inflightTeamStates.delete(cacheKey)
+    })
+  inflightTeamStates.set(cacheKey, promise)
+  return promise
 }
 
 export function HulyTaskStateChanger({
   issue,
   sourceContext,
   settings,
-  onOpen
+  onUpdate
 }: Props): React.JSX.Element | null {
   const ctx = sourceContext ?? settings
   const [open, setOpen] = useState(false)
@@ -33,15 +63,15 @@ export function HulyTaskStateChanger({
   const workspace = issue.workspaceName ?? undefined
 
   useEffect(() => {
-    if (!open || !ctx || states.length > 0 || !issue.team.id) return
+    if (!open || !ctx || !issue.team.id) return
     let cancelled = false
-    void hulyGetTeamStates(ctx, issue.team.id, workspace).then((result) => {
+    void loadTeamStatesCached(ctx, issue.team.id, workspace).then((result) => {
       if (!cancelled) setStates(result)
     })
     return () => {
       cancelled = true
     }
-  }, [open, ctx, states.length, issue.team.id, workspace])
+  }, [open, ctx, issue.team.id, workspace])
 
   const orderedStates = useMemo(() => states, [states])
 
@@ -52,7 +82,8 @@ export function HulyTaskStateChanger({
     }
     setSaving(true)
     try {
-      await hulyUpdateIssue(ctx, issue.id, { stateId }, workspace)
+      const updated = await hulyUpdateIssue(ctx, issue.id, { stateId }, workspace)
+      if (updated) onUpdate?.(updated)
       setOpen(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update state.')
@@ -69,9 +100,6 @@ export function HulyTaskStateChanger({
           onClick={(event) => {
             event.stopPropagation()
             setOpen((current) => !current)
-            if (states.length === 0) {
-              onOpen(issue)
-            }
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -80,12 +108,11 @@ export function HulyTaskStateChanger({
           }}
           className={cn(
             'shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition',
-            stateToneClasses(issue.state.type),
-            'opacity-0 group-hover/huly-task-row:opacity-100 focus-visible:opacity-100'
+            stateToneClasses(issue.state.type)
           )}
           aria-label="Change state"
         >
-          {saving ? <LoaderCircle className="size-3 animate-spin" /> : issue.state.name}
+          {saving ? <LoaderCircle className="size-3 animate-spin" /> : issue.state.name || '—'}
         </button>
       </PopoverTrigger>
       {orderedStates.length > 0 ? (

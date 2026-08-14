@@ -18,11 +18,11 @@ export function buildHulyPrompt(issue: HulyIssue): string {
 export async function copyHulyTextToClipboard(text: string, label: string): Promise<void> {
   try {
     await window.api.ui.writeClipboardText(text)
-    toast.success(translate('auto.components.huly.issueWorkspace.copied', '{label} copied', { values: { label } }))
+    toast.success(translate('auto.components.huly.issueWorkspace.copied', '{label} copied', { label }))
   } catch {
     toast.error(
       translate('auto.components.huly.issueWorkspace.copyFailed', 'Failed to copy {label}', {
-        values: { label: label.toLowerCase() }
+        label: label.toLowerCase()
       })
     )
   }

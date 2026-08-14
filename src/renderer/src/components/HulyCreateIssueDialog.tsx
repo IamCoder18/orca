@@ -321,7 +321,7 @@ export function HulyCreateIssueDialog({
             {translate(
               'auto.components.huly.createDialog.submitShortcut',
               '{shortcut} to submit.',
-              { values: { shortcut: submitShortcutLabel } }
+              { shortcut: submitShortcutLabel }
             )}
           </span>
           <div className="flex items-center gap-2">

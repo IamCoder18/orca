@@ -48,6 +48,7 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
   const [submittingComment, setSubmittingComment] = useState(false)
   const [savingState, setSavingState] = useState(false)
   const requestIdRef = useRef(0)
+  const cancelledRef = useRef(false)
 
   const loadComments = useCallback(async (requestId: number): Promise<void> => {
     setCommentsLoading(true)
@@ -55,12 +56,14 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
     try {
       const fetched = await hulyListComments(providerSettings, issue.id, workspace ?? undefined)
       if (requestId !== requestIdRef.current) return
+      if (cancelledRef.current) return
       setComments(fetched)
     } catch (error) {
       if (requestId !== requestIdRef.current) return
+      if (cancelledRef.current) return
       setCommentsError(error instanceof Error ? error.message : 'Failed to load comments.')
     } finally {
-      if (requestId === requestIdRef.current) {
+      if (requestId === requestIdRef.current && !cancelledRef.current) {
         setCommentsLoading(false)
       }
     }
@@ -73,8 +76,10 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
     }
     try {
       const statesResult = await hulyGetTeamStates(providerSettings, teamId, workspace ?? undefined)
+      if (cancelledRef.current) return
       setStates(statesResult)
     } catch (error) {
+      if (cancelledRef.current) return
       console.warn('[huly] loadTeamStates failed', error)
       setStates([])
     }
@@ -82,6 +87,7 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
 
   useEffect(() => {
     let cancelled = false
+    cancelledRef.current = false
     void (async () => {
       // Why: the parent already supplies a fully-populated HulyIssue; only refetch
       // when description is missing so the user always sees a complete sheet.
@@ -99,6 +105,7 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
     })()
     return () => {
       cancelled = true
+      cancelledRef.current = true
     }
   }, [providerSettings, issue.id, workspace, fullIssue.description, loadComments, loadTeamStates])
 
@@ -219,7 +226,9 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
                   stateToneClasses(fullIssue.state.type)
                 )}
               >
-                {fullIssue.state.name}
+                {fullIssue.state.name ||
+                  fullIssue.state.id.split(':').pop() ||
+                  translate('auto.components.huly.issueWorkspace.stateUnknown', 'Open')}
               </span>
               {fullIssue.priority > 0 ? (
                 <span className="inline-flex items-center rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -283,7 +292,7 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-foreground">
                   {translate('auto.components.huly.issueWorkspace.commentsTitle', 'Comments ({count})', {
-                    values: { count: comments.length }
+                    count: comments.length
                   })}
                 </p>
                 <Button
@@ -387,7 +396,7 @@ export function HulyIssueWorkspace({ issue, onUse, onClose, sourceContext }: Pro
             <HulyIssueMetadataSidebar issue={fullIssue} />
             <div className="mt-3">
               <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Actions
+                {translate('auto.components.huly.issueWorkspace.actionsHeading', 'Actions')}
               </p>
               <HulyIssueActionSidebar issue={fullIssue} />
             </div>

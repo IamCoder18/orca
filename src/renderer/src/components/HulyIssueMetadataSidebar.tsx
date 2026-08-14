@@ -6,6 +6,7 @@ import React from 'react'
 import { HulyPriorityIcon } from '@/lib/huly-priority-icon'
 import { getHulyPriorityLabel } from '@/lib/huly-presentation'
 import { formatUiRelativeTimeFromDate } from '@/i18n/relative-time-format'
+import { translate } from '@/i18n/i18n'
 import type { HulyIssue } from '../../../shared/huly'
 
 type Props = { issue: HulyIssue }
@@ -26,18 +27,23 @@ function MetaRow({
 }
 
 export function HulyIssueMetadataSidebar({ issue }: Props): React.JSX.Element {
-  const assigneeName = issue.assignee?.displayName ?? 'Unassigned'
-  const priorityLabel = issue.priority > 0 ? getHulyPriorityLabel(issue.priority) : 'None'
+  const unassigned = translate('auto.components.huly.metadata.unassigned', 'Unassigned')
+  const noneLabel = translate('auto.components.huly.metadata.none', 'None')
+  const assigneeName = issue.assignee?.displayName ?? unassigned
+  const priorityLabel = issue.priority > 0 ? getHulyPriorityLabel(issue.priority) : noneLabel
   return (
     <div className="grid gap-2.5 border-b border-border/40 pb-3">
-      <MetaRow label="Status" value={issue.state.name} />
-      <MetaRow label="Priority" value={issue.priority > 0 ? <span className="inline-flex items-center gap-1.5"><HulyPriorityIcon priority={issue.priority} /><span>{priorityLabel}</span></span> : priorityLabel} />
-      <MetaRow label="Assignee" value={assigneeName} />
-      <MetaRow label="Team" value={issue.team.name} />
-      {issue.workspaceName ? <MetaRow label="Workspace" value={issue.workspaceName} /> : null}
+      <MetaRow label={translate('auto.components.huly.metadata.status', 'Status')} value={issue.state.name} />
+      <MetaRow
+        label={translate('auto.components.huly.metadata.priority', 'Priority')}
+        value={issue.priority > 0 ? <span className="inline-flex items-center gap-1.5"><HulyPriorityIcon priority={issue.priority} /><span>{priorityLabel}</span></span> : priorityLabel}
+      />
+      <MetaRow label={translate('auto.components.huly.metadata.assignee', 'Assignee')} value={assigneeName} />
+      <MetaRow label={translate('auto.components.huly.metadata.team', 'Team')} value={issue.team.name} />
+      {issue.workspaceName ? <MetaRow label={translate('auto.components.huly.metadata.workspace', 'Workspace')} value={issue.workspaceName} /> : null}
       {issue.labels.length > 0 ? (
         <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Labels</span>
+          <span className="text-xs text-muted-foreground">{translate('auto.components.huly.metadata.labels', 'Labels')}</span>
           <div className="flex flex-wrap justify-end gap-1">
             {issue.labels.map((label) => (
               <span
@@ -51,8 +57,16 @@ export function HulyIssueMetadataSidebar({ issue }: Props): React.JSX.Element {
           </div>
         </div>
       ) : null}
-      <MetaRow label="Created" value={formatUiRelativeTimeFromDate(issue.updatedAt)} />
-      <MetaRow label="Updated" value={formatUiRelativeTimeFromDate(issue.updatedAt)} />
+      {issue.createdAt ? (
+        <MetaRow
+          label={translate('auto.components.huly.metadata.created', 'Created')}
+          value={formatUiRelativeTimeFromDate(issue.createdAt)}
+        />
+      ) : null}
+      <MetaRow
+        label={translate('auto.components.huly.metadata.updated', 'Updated')}
+        value={issue.updatedAt ? formatUiRelativeTimeFromDate(issue.updatedAt) : noneLabel}
+      />
     </div>
   )
 }

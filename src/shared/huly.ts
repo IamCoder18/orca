@@ -25,7 +25,7 @@ export type HulyIssueState = {
 
 export type HulyTeamMember = {
   id: string
-  displayName: string
+  displayName?: string
   email?: string | null
 }
 
@@ -61,6 +61,7 @@ export type HulyIssue = {
   priority: number
   dueDate?: string | null
   updatedAt: string
+  createdAt?: string
   /** Why: server-side `createdBy` UUID powers client-side "created by me" filter. */
   createdBy?: string
 }

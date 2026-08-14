@@ -1,19 +1,31 @@
-// Why: view mirrors GitHub's task list — rounded preset bar at top, a
-// 4-column CSS-grid row list (ID, title, updated, actions) with sticky
-// ID/title cells, 12-row shimmer during load, and the same empty state.
+// Why: view mirrors GitHub's task list — toolbar at top (filter chips,
+// search, sort, refresh, new), a 4-column CSS-grid row list (ID, title,
+// updated, actions) with sticky ID/title cells, 12-row shimmer during load,
+// and the same empty state.
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowDownUp, LoaderCircle, Plus, RefreshCw, Search, X } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
 import type { HulyIssue, HulyListFilter } from '../../../shared/huly'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { HulyIssueWorkspace } from './HulyIssueWorkspace'
 import { HulyCreateIssueDialog } from './HulyCreateIssueDialog'
-import { HulyTaskRow, HULY_TASK_HEADER_SURFACE_CLASS } from './huly-task-row'
+import {
+  HulyTaskRow,
+  HULY_TASK_GRID_CLASS,
+  HULY_TASK_HEADER_SURFACE_CLASS,
+  HULY_TASK_STICKY_ID_CELL_CLASS,
+  HULY_TASK_STICKY_TITLE_CELL_CLASS
+} from './huly-task-row'
 import { HulyTaskSkeleton } from './huly-task-skeleton'
+import { TaskPageHulyToolbar } from './TaskPageHulyToolbar'
+import {
+  HULY_DEFAULT_FILTER_KEY,
+  HULY_FILTERS,
+  readPersistedHulyPreference,
+  type HulySortOrder
+} from './task-page-huly-labels'
+import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -26,34 +38,7 @@ type Props = {
   onUseIssue: (issue: HulyIssue) => void
 }
 
-type SortOrder = 'updated' | 'priority' | 'identifier'
-
-const FILTERS: { id: HulyListFilter; label: string }[] = [
-  { id: 'assigned', label: 'Assigned to me' },
-  { id: 'created', label: 'Created by me' },
-  { id: 'all', label: 'All open' }
-]
-
-const SORT_OPTIONS: { id: SortOrder; label: string }[] = [
-  { id: 'updated', label: 'Updated' },
-  { id: 'priority', label: 'Priority' },
-  { id: 'identifier', label: 'Identifier' }
-]
-
-const ALL_WORKSPACES = '__all__'
-const DEFAULT_FILTER_KEY = 'orca-huly-default-filter'
-const DEFAULT_SORT_KEY = 'orca-huly-default-sort'
-
-function readPersisted<T extends string>(key: string, allowed: readonly T[]): T | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(key)
-    if (!raw) return null
-    return allowed.includes(raw as T) ? (raw as T) : null
-  } catch {
-    return null
-  }
-}
+const PAGE_SIZE = 50
 
 export function TaskPageHulyView({
   sourceContext,
@@ -66,27 +51,18 @@ export function TaskPageHulyView({
 }: Props): React.JSX.Element {
   const listIssues = useAppStore((s) => s.listHulyIssues)
   const settings = useAppStore((s) => s.settings)
-  const PAGE_SIZE = 50
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const [loadMoreLoading, setLoadMoreLoading] = useState(false)
-  const validFilters: readonly HulyListFilter[] = ['assigned', 'created', 'all']
-  const validSorts: readonly SortOrder[] = ['updated', 'priority', 'identifier']
-  // Why: persist default filter/sort so a reload on the Huly tab lands on the
+  // Why: persist default filter so a reload on the Huly tab lands on the
   // same preset. Per-task default works just like GitHub's right-click
   // "Set as default" — local to this task surface, not a global preference.
   const [filter, setFilter] = useState<HulyListFilter>(
-    () => readPersisted(DEFAULT_FILTER_KEY, validFilters) ?? 'assigned'
+    () => readPersistedHulyPreference(HULY_DEFAULT_FILTER_KEY, HULY_FILTERS) ?? 'assigned'
   )
-  const [sort, setSort] = useState<SortOrder>(
-    () => readPersisted(DEFAULT_SORT_KEY, validSorts) ?? 'updated'
+  const [sort, setSort] = useState<HulySortOrder>('updated')
+  const [defaultFilter, setDefaultFilter] = useState<HulyListFilter | null>(() =>
+    readPersistedHulyPreference(HULY_DEFAULT_FILTER_KEY, HULY_FILTERS)
   )
-  const [defaultFilter, setDefaultFilter] = useState<HulyListFilter>(
-    () => readPersisted(DEFAULT_FILTER_KEY, validFilters) ?? 'assigned'
-  )
-  // default sort is read for symmetry with the filter default; UI to
-  // mutate it lands alongside the sort dropdown in a follow-up.
-  void defaultFilter
-  useState<SortOrder>(() => readPersisted(DEFAULT_SORT_KEY, validSorts) ?? 'updated')
   const [search, setSearch] = useState('')
   const [issues, setIssues] = useState<HulyIssue[]>([])
   const [loading, setLoading] = useState(false)
@@ -118,17 +94,19 @@ export function TaskPageHulyView({
         if (cancelled) return
         setIssues(result)
         setLoading(false)
+        setLoadMoreLoading(false)
       })
       .catch((err: unknown) => {
         if (cancelled) return
         setError(err instanceof Error ? err.message : 'Failed to load issues.')
         setIssues([])
         setLoading(false)
+        setLoadMoreLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [connected, filter, listIssues, sourceContext, workspacesKey, workspace, refreshKey])
+  }, [connected, filter, listIssues, sourceContext, workspacesKey, workspace, refreshKey, pageSize])
 
   const sorted = useMemo(() => {
     const list = [...issues]
@@ -157,6 +135,10 @@ export function TaskPageHulyView({
   const showTeam = workspaces.length > 1
   const refresh = useCallback(() => setRefreshKey((n) => n + 1), [])
 
+  const handleRowUpdate = useCallback((updated: HulyIssue): void => {
+    setIssues((prev) => prev.map((issue) => (issue.id === updated.id ? updated : issue)))
+  }, [])
+
   if (!statusReady) {
     return (
       <div className="mt-4 flex items-center justify-center py-14">
@@ -168,159 +150,39 @@ export function TaskPageHulyView({
   if (!connected) {
     return (
       <div className="mt-4 flex flex-col items-center justify-center rounded-md border border-border/50 bg-muted/50 px-6 py-14 text-center shadow-sm">
-        <p className="text-base font-medium text-foreground">Connect Huly</p>
+        <p className="text-base font-medium text-foreground">
+          {translate('auto.components.TaskPage.huly.connect.heading', 'Connect Huly')}
+        </p>
         <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-          Browse, create, and start work from Huly issues directly from here. Run
-          `huly auth login` on the host, then click Connect in Settings.
+          {translate(
+            'auto.components.TaskPage.huly.connect.body',
+            'Browse, create, and start work from Huly issues directly from here. Run `huly auth login` on the host, then click Connect in Settings.'
+          )}
         </p>
       </div>
     )
   }
 
+  const showingMore = issues.length >= pageSize
+
   return (
     <div className="flex min-h-0 max-h-full flex-col overflow-hidden rounded-md rounded-t-none border border-t-0 border-border/50 bg-background shadow-sm">
-      <div
-        className={cn(
-          'flex min-w-0 flex-col gap-2.5 rounded-md rounded-b-none border border-border/50 px-3 py-2.5',
-          HULY_TASK_HEADER_SURFACE_CLASS
-        )}
-      >
-        <div className="flex flex-wrap gap-1.5">
-          {workspaces.length > 1 ? (
-            <Select
-              value={selectedWorkspace ?? ALL_WORKSPACES}
-              onValueChange={(v) => onSelectWorkspace(v === ALL_WORKSPACES ? null : v)}
-            >
-              <SelectTrigger className="h-7 w-[160px] rounded-md border-border/50 bg-background text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_WORKSPACES}>All workspaces</SelectItem>
-                {workspaces.map((w) => (
-                  <SelectItem key={w.id} value={w.name}>
-                    {w.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-          {FILTERS.map((preset) => {
-            const active = filter === preset.id
-            const isDefault = defaultFilter === preset.id
-            return (
-              <Tooltip key={preset.id}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setFilter(preset.id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      window.localStorage.setItem(DEFAULT_FILTER_KEY, preset.id)
-                      setDefaultFilter(preset.id)
-                    }}
-                    className={cn(
-                      'relative rounded-md border px-2.5 py-1 text-xs font-medium transition',
-                      active
-                        ? 'border-border/50 bg-foreground/90 text-background shadow-xs'
-                        : 'border-border/60 bg-background text-foreground shadow-xs hover:bg-muted/60'
-                    )}
-                  >
-                    {preset.label}
-                    {isDefault ? (
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'absolute -right-1 -top-1 size-2 rounded-full',
-                          active
-                            ? 'bg-status-success ring-2 ring-background'
-                            : 'bg-status-success'
-                        )}
-                      />
-                    ) : null}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={4}>
-                  {isDefault
-                    ? 'Default preset — right-click to clear, click to switch'
-                    : 'Click to switch, right-click to set as default'}
-                </TooltipContent>
-              </Tooltip>
-            )
-          })}
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1 basis-64">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search Huly issues…"
-              className="h-8 rounded-md border-border/60 bg-background pl-8 pr-8 text-xs text-foreground shadow-xs"
-            />
-            {search ? (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
-              >
-                <X className="size-4" />
-              </button>
-            ) : null}
-          </div>
-          <Select value={sort} onValueChange={(v) => setSort(v as SortOrder)}>
-            <SelectTrigger className="h-8 w-[140px] rounded-md border-border/60 bg-background text-xs">
-              <ArrowDownUp className="mr-1 size-3 text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((opt) => (
-                <SelectItem key={opt.id} value={opt.id}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setCreateOpen(true)}
-                aria-label="New Huly issue"
-                className="size-8 border-border/60 bg-background text-foreground shadow-xs hover:bg-muted/60"
-              >
-                <Plus className="size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              New Huly issue
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={refresh}
-                disabled={loading}
-                aria-busy={loading}
-                aria-label={loading ? 'Refreshing Huly work' : 'Refresh Huly work'}
-                className="size-8 cursor-pointer border-border/60 bg-background text-foreground shadow-xs hover:bg-muted/60 disabled:pointer-events-auto disabled:cursor-wait"
-              >
-                {loading ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              {loading ? 'Refreshing Huly work…' : 'Refresh Huly work'}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
+      <TaskPageHulyToolbar
+        workspaces={workspaces}
+        selectedWorkspace={selectedWorkspace}
+        onSelectWorkspace={onSelectWorkspace}
+        filter={filter}
+        defaultFilter={defaultFilter}
+        onChangeFilter={setFilter}
+        onSetDefaultFilter={setDefaultFilter}
+        sort={sort}
+        onChangeSort={setSort}
+        search={search}
+        onChangeSearch={setSearch}
+        loading={loading}
+        onRefresh={refresh}
+        onCreate={() => setCreateOpen(true)}
+      />
 
       {loading && issues.length === 0 ? <HulyTaskSkeleton /> : null}
 
@@ -330,15 +192,35 @@ export function TaskPageHulyView({
 
       {!loading && !error && filtered.length === 0 ? (
         <div className="px-4 py-10 text-center">
-          <p className="text-base font-medium text-foreground">No Huly issues</p>
+          <p className="text-base font-medium text-foreground">
+            {translate('auto.components.TaskPage.huly.empty.heading', 'No Huly issues')}
+          </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {search ? 'No issues match your search.' : 'No issues match the selected preset.'}
+            {search
+              ? translate('auto.components.TaskPage.huly.empty.searchNone', 'No issues match your search.')
+              : translate('auto.components.TaskPage.huly.empty.presetNone', 'No issues match the selected preset.')}
           </p>
         </div>
       ) : null}
 
       {filtered.length > 0 ? (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="scrollbar-sleek min-h-0 flex-1 overflow-y-auto">
+          <div
+            className={cn(
+              'sticky top-0 z-40 h-8 border-b border-border/50 px-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground [&>div]:flex [&>div]:items-center',
+              HULY_TASK_HEADER_SURFACE_CLASS,
+              HULY_TASK_GRID_CLASS
+            )}
+          >
+            <div className={HULY_TASK_STICKY_ID_CELL_CLASS}>
+              {translate('auto.components.TaskPage.huly.column.id', 'ID')}
+            </div>
+            <div className={HULY_TASK_STICKY_TITLE_CELL_CLASS}>
+              {translate('auto.components.TaskPage.huly.column.title', 'Title / Context')}
+            </div>
+            <div>{translate('auto.components.TaskPage.huly.column.updated', 'Updated')}</div>
+            <div />
+          </div>
           <div className="divide-y divide-border/40">
             {filtered.map((issue) => (
               <HulyTaskRow
@@ -349,10 +231,12 @@ export function TaskPageHulyView({
                 settings={settings}
                 onOpen={(i) => setSelectedIssueId(i.id)}
                 onOpenInHuly={(i) => void window.api.shell.openUrl(i.url)}
+                onUse={onUseIssue}
+                onIssueUpdate={handleRowUpdate}
               />
             ))}
           </div>
-          {issues.length >= pageSize ? (
+          {showingMore ? (
             <div className="flex items-center justify-center border-t border-border/40 bg-muted/20 px-3 py-2">
               <Button
                 variant="ghost"
@@ -366,16 +250,20 @@ export function TaskPageHulyView({
                 {loadMoreLoading ? (
                   <LoaderCircle className="size-3 animate-spin" />
                 ) : (
-                  <>Show more</>
+                  translate('auto.components.TaskPage.huly.showMore', 'Show more')
                 )}
               </Button>
               <span className="ml-3 text-[11px] text-muted-foreground">
-                Showing {issues.length}
+                {translate('auto.components.TaskPage.huly.showingCount', 'Showing {count}', {
+                  count: issues.length
+                })}
               </span>
             </div>
           ) : (
             <div className="border-t border-border/40 bg-muted/20 px-3 py-1.5 text-center text-[11px] text-muted-foreground">
-              {issues.length} issue{issues.length === 1 ? '' : 's'}
+              {translate('auto.components.TaskPage.huly.issueCount', '{count} issue | {count} issues', {
+                count: issues.length
+              })}
             </div>
           )}
         </div>

@@ -196,11 +196,13 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
     const promise = (async () => {
       try {
         const viewerEmail = get().hulyStatus?.viewer?.email ?? undefined
+        const viewerUuid = get().hulyViewerUuid ?? undefined
         const issues = await hulyListIssues(ctx, {
           filter,
           limit,
           workspace: options?.workspace ?? undefined,
-          viewerEmail
+          viewerEmail,
+          viewerUuid
         })
       // Why: `whoami` doesn't expose the viewer's UUID and the huly CLI has
       // no `--created-by` flag. The CLI's `--assignee <email>` resolves the
@@ -214,10 +216,10 @@ export const createHulySlice: StateCreator<AppState, [], [], HulySlice> = (set, 
           set({ hulyViewerUuid: viewerUuid })
         }
       }
-      const viewerUuid = get().hulyViewerUuid
+      const resolvedViewerUuid = get().hulyViewerUuid
       const filtered =
-        filter === 'created' && viewerUuid
-          ? issues.filter((issue) => issue.createdBy === viewerUuid)
+        filter === 'created' && resolvedViewerUuid
+          ? issues.filter((issue) => issue.createdBy === resolvedViewerUuid)
           : issues
       set((state) => ({
         hulyListCache: evictStaleEntries({
